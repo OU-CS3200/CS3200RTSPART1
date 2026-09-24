@@ -1,0 +1,9 @@
+(executable
+ (name main)
+ (modules main)
+ (libraries rtsarena rts1))
+
+(executable
+ (name rts_bot)
+ (modules rts_bot)
+ (libraries rtsarena rts1))

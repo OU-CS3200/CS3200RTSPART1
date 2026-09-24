@@ -1,0 +1,5 @@
+(library
+ (name rts1)
+ (modules util queries eval rules bot)
+ (wrapped false)
+ (libraries rtsarena))
