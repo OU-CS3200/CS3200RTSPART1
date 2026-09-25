@@ -12,15 +12,17 @@
 
 open Rtsarena
 
-(* Your bot joins the built-ins. [random] is rebuilt for every match so that
+(* Your bots join the built-ins: [my-bot] from RTS-1, [my-search] from
+   RTS-3 (a fresh one per match, so its cache starts empty). [random] is rebuilt for every match so that
    every match starts from the same seed. *)
 let bot_named name =
   match name with
   | "my-bot" -> Some Bot.my_bot
+  | "my-search" -> Some (Search.Search_bot.make ())
   | "random" -> Some (random_bot 42)
   | _ -> Rtsarena.bot_named name
 
-let bot_names () = "my-bot" :: Rtsarena.bot_names ()
+let bot_names () = "my-search" :: "my-bot" :: Rtsarena.bot_names ()
 
 let arg_value name default argv =
   let rec go = function
@@ -64,8 +66,8 @@ let cmd_play argv =
        let size, turns, preset, interval = common rest in
        let show = has_flag "show" rest and quiet = has_flag "quiet" rest in
        let on_tick g _ =
-         if show && g.turn mod 50 = 0 then begin
-           Printf.printf "\n-- turn %d --  resources %d / %d\n" g.turn
+         if show && turn g mod 50 = 0 then begin
+           Printf.printf "\n-- turn %d --  resources %d / %d\n" (turn g)
              (resources_of g 0) (resources_of g 1);
            print_string (to_ascii g 0)
          end

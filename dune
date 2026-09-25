@@ -9,5 +9,6 @@
   (alias_rec bin/all)
   (alias_rec test/all)
   (alias_rec props/all)
-  (alias_rec fixes/all))
+  (alias_rec fixes/all)
+  (alias_rec search/all))
  (action (progn)))

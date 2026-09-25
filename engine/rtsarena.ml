@@ -11,6 +11,10 @@
     — which is exactly the property a tree search wants, and exactly the point
     CS 3200 spends the semester making.
 
+    RTS-2 reference: sealed behind rtsarena.mli, with the four flaws fixed —
+    shared terrain, first-mover bias, hidden state in [random_bot], and kiting
+    that ignored the map. Each fix is marked [RTS-2 fix].
+
     No external libraries. Standard library only. *)
 
 (* ------------------------------------------------------------------ *)
@@ -175,6 +179,19 @@ let entities_of g ?kind ?building player =
 let find_building g player bt =
   List.find_opt (fun e -> e.player = player && e.kind = B bt) g.entities
 
+let next_id g = g.next_id
+let size g = g.size
+let turn g = g.turn
+let max_turns g = g.max_turns
+let entities g = g.entities
+let is_over g = g.over
+let winner g = g.winner
+let reason g = g.reason
+let with_entities g ents = { g with entities = ents }
+
+let resource_left g x y =
+  match PosMap.find_opt (x, y) g.res with Some n -> n | None -> 0
+
 (* ---- map presets -------------------------------------------------- *)
 
 (* Mirrors MAP_PRESETS_BY_SIZE. Each listed tile is placed, then mirrored
@@ -229,6 +246,24 @@ let make_game ?(size = 16) ?(max_turns = 500) ?(preset = "default") () =
   { size; max_turns; turn = 0; entities; resources = (5, 5);
     terrain; res = !res; next_id = 7;
     over = false; winner = -1; reason = "" }
+
+(** Rebuild a game from the wire. The arrays are copied: the caller keeps
+    theirs, and the game owns its own. *)
+let of_snapshot ?next_id ~size ~max_turns ~turn ~terrain ~amounts ~resources ents =
+  let get a y x = if y < Array.length a && x < Array.length a.(y) then a.(y).(x) else Empty in
+  let terrain = Array.init size (fun y -> Array.init size (fun x -> get terrain y x)) in
+  let res = ref PosMap.empty in
+  Array.iteri
+    (fun y row -> Array.iteri (fun x n -> if n > 0 && x < size && y < size then
+                                  res := PosMap.add (x, y) n !res) row)
+    amounts;
+  let next_id =
+    match next_id with
+    | Some n -> n
+    | None -> List.fold_left (fun m e -> max m (e.id + 1)) 10_000 ents
+  in
+  { size; max_turns; turn; entities = ents; resources; terrain; res = !res;
+    next_id; over = false; winner = -1; reason = "" }
 
 (* ------------------------------------------------------------------ *)
 (* 4. Movement                                                        *)
@@ -396,15 +431,20 @@ let kite g e pool =
     in
     match nearest with
     | Some (m, d) when d <= e.range + 2 ->
+      (* RTS-2 fix: a retreat step is a move like any other — it must land
+         on the board, off a wall, and on a free cell. *)
       let sgn v = compare v 0 in
       let dx = sgn (e.x - m.x) and dy = sgn (e.y - m.y) in
-      let clamp v = max 0 (min (g.size - 1) v) in
-      if dx <> 0 then { e with x = clamp (e.x + dx) }
-      else if dy <> 0 then { e with y = clamp (e.y + dy) }
+      let free x y =
+        in_bounds g x y && cell_at g x y <> Wall && not (occupied ~except:e.id g x y) in
+      if dx <> 0 && free (e.x + dx) e.y then { e with x = e.x + dx }
+      else if dy <> 0 && free e.x (e.y + dy) then { e with y = e.y + dy }
       else e
     | _ -> e
 
-let step_attack g e ax ay evs =
+(* Who [e] would shoot at, and the pool it chose from. Ties go to the
+   smaller id, so the choice does not depend on list order. *)
+let choose_target g e =
   let enemies = List.filter (fun en -> en.player <> e.player && en.hp > 0) g.entities in
   (* prefer real soldiers; fall back to whatever is left *)
   let military =
@@ -415,19 +455,55 @@ let step_attack g e ax ay evs =
     List.fold_left
       (fun best en ->
          let d = dist e en in
-         match best with Some (_, bd) when bd <= d -> best | _ -> Some (en, d))
+         match best with
+         | Some (b, bd) when (bd, b.id) <= (d, en.id) -> best
+         | _ -> Some (en, d))
       None pool
   in
-  match nearest with
-  | Some (target, d) when d <= e.range ->
-    let g = damage_entity g target.id e.damage in
-    let e = kite g e pool in
-    (replace g e, Combat { attacker = e.id; target = target.id; damage = e.damage } :: evs)
-  | Some (target, _) -> (replace g (move_toward g e (target.x, target.y)), evs)
-  | None -> (replace g (move_toward g e (ax, ay)), evs)
+  (nearest, pool)
+
+(* RTS-2 fix: combat is simultaneous. Every shot this tick is chosen from the
+   state at the START of the tick, before anyone moves, and all the damage
+   lands together at the end. A unit that dies this tick still fires. The
+   old engine resolved one entity at a time, so whoever came first in the
+   entity list could kill a unit before it hit back. *)
+let volleys g =
+  List.filter_map
+    (fun e ->
+       match e.action with
+       | Some (Attack_at _) when not (is_building e) ->
+         (match choose_target g e with
+          | Some (t, d), _ when d <= e.range -> Some (e, t)
+          | _ -> None)
+       | _ -> None)
+    g.entities
+
+let step_attack g e ax ay ~fired evs =
+  let nearest, pool = choose_target g e in
+  if List.mem e.id fired then (replace g (kite g e pool), evs)
+  else
+    match nearest with
+    | Some (target, _) -> (replace g (move_toward g e (target.x, target.y)), evs)
+    | None -> (replace g (move_toward g e (ax, ay)), evs)
+
+(* RTS-2 fix: the builder used to walk onto the site itself (a path may end
+   on its target) and the building then appeared on top of it. Now it steps
+   off the site, and a building only completes on a free cell. *)
+let step_off g e =
+  match
+    List.find_opt
+      (fun (dx, dy) ->
+         let nx = e.x + dx and ny = e.y + dy in
+         in_bounds g nx ny && cell_at g nx ny <> Wall && not (occupied ~except:e.id g nx ny))
+      [ (1, 0); (0, 1); (-1, 0); (0, -1) ]
+  with
+  | Some (dx, dy) -> { e with x = e.x + dx; y = e.y + dy }
+  | None -> e
 
 let step_build g e bt bx by progress evs =
-  if dist_xy e.x e.y bx by <= 1 then
+  if e.x = bx && e.y = by then (replace g (step_off g e), evs)
+  else if dist_xy e.x e.y bx by <= 1 && occupied ~except:e.id g bx by then (g, evs)
+  else if dist_xy e.x e.y bx by <= 1 then
     let progress = progress + 1 in
     if progress >= (building_stats bt).build_ticks then
       let b = make_entity g.next_id (B bt) e.player bx by in
@@ -438,7 +514,7 @@ let step_build g e bt bx by progress evs =
       (replace g { e with action = Some (Building_it { btype = bt; bx; by; progress }) }, evs)
   else (replace g (move_toward g e (bx, by)), evs)
 
-let step_entity (g, evs) id =
+let step_entity ~fired (g, evs) id =
   (* look the entity up again: an earlier entity this tick may have killed it *)
   match List.find_opt (fun e -> e.id = id && e.hp > 0) g.entities with
   | None -> (g, evs)
@@ -448,7 +524,7 @@ let step_entity (g, evs) id =
       match e.action with
       | None -> (g, evs)
       | Some (Harvest remembered) -> step_harvest g e remembered evs
-      | Some (Attack_at (ax, ay)) -> step_attack g e ax ay evs
+      | Some (Attack_at (ax, ay)) -> step_attack g e ax ay ~fired evs
       | Some (Move_to (mx, my)) ->
         if e.x = mx && e.y = my then (replace g { e with action = None }, evs)
         else (replace g (move_toward g e (mx, my)), evs)
@@ -475,8 +551,16 @@ let step g =
   if g.over then (g, [])
   else begin
     let g = { g with turn = g.turn + 1 } in
+    let shots = volleys g in
+    let fired = List.map (fun (a, _) -> a.id) shots in
     let ids = List.map (fun e -> e.id) g.entities in
-    let g, evs = List.fold_left step_entity (g, []) ids in
+    let g, evs = List.fold_left (step_entity ~fired) (g, []) ids in
+    let g = List.fold_left (fun g (a, t) -> damage_entity g t.id a.damage) g shots in
+    let evs =
+      List.rev_map
+        (fun (a, t) -> Combat { attacker = a.id; target = t.id; damage = a.damage }) shots
+      @ evs
+    in
     let dead = List.filter (fun e -> e.hp <= 0) g.entities in
     let evs =
       List.fold_left
@@ -669,7 +753,7 @@ type view = {
   my_units : entity list;
   enemy_units : entity list;
   v_size : int;
-  v_game : game;                         (** the whole world; full information *)
+  world : game;                          (** the whole world, read-only now *)
 }
 
 let view g player =
@@ -678,7 +762,7 @@ let view g player =
     enemy_resources = resources_of g (1 - player);
     my_units = List.filter (fun e -> e.player = player) g.entities;
     enemy_units = List.filter (fun e -> e.player <> player) g.entities;
-    v_size = g.size; v_game = g }
+    v_size = g.size; world = g }
 
 (** The board as text, from [player]'s side: your pieces upper-case, theirs
     lower-case, [$] a resource tile, [#] a wall. This is exactly the rendering
@@ -775,11 +859,17 @@ let balanced : bot = fun v ->
       else Build_barracks)
   :: attack_or_defend v (army >= 4)
 
-(** Deterministic pseudo-random bot: seeded, so games stay reproducible. *)
+(** Deterministic pseudo-random bot.
+
+    RTS-2 fix: the generator used to live in a [ref] created once per call
+    of [random_bot], so a bot value remembered every game it had played. Now
+    each consultation reseeds from [(seed, turn)]: the same seed and the
+    same board always give the same orders. The [ref] below is local to one
+    call, so nobody can observe it. *)
 let random_bot seed : bot =
-  let state = ref seed in
-  let next () = state := ((!state * 1103515245) + 12345) land 0x3FFFFFFF; !state in
   fun v ->
+    let state = ref (Hashtbl.hash (seed, v.v_turn)) in
+    let next () = state := ((!state * 1103515245) + 12345) land 0x3FFFFFFF; !state in
     let r n = next () mod n in
     let cmds = [ Harvest_with (1 + r 3) ] in
     let cmds = if r 10 < 3 then cmds @ [ Build_barracks ] else cmds in
@@ -815,14 +905,17 @@ type result = {
   final : game;
 }
 
-(** Play one match. Bots are consulted on turn 0 and every [interval] ticks —
-    the same cadence as the JavaScript runner's default. *)
-let play ?(size = 16) ?(max_turns = 500) ?(preset = "default") ?(interval = 20)
-    ?(on_tick = fun _ _ -> ()) (p0 : bot) (p1 : bot) =
+(** The game a view came from. Handing it out is safe: [game] is abstract
+    and immutable, so a "fork" is the game itself — no copy needed. *)
+let fork v = v.world
+
+(* Consult the bots now, then every [interval] ticks, until [stop] or the
+   end of the game. *)
+let run ~interval ~stop ~on_tick g (p0 : bot) (p1 : bot) =
   let rec loop g since =
-    if g.over then g
+    if g.over || g.turn >= stop then g
     else
-      let consult = g.turn = 0 || since >= interval in
+      let consult = since >= interval in
       let g =
         if not consult then g
         else
@@ -833,6 +926,15 @@ let play ?(size = 16) ?(max_turns = 500) ?(preset = "default") ?(interval = 20)
       on_tick g evs;
       loop g (if consult then 1 else since + 1)
   in
-  let final = loop (make_game ~size ~max_turns ~preset ()) 0 in
+  loop g interval
+
+let rollout ?(interval = 20) g p0 p1 ~ticks =
+  run ~interval ~stop:(g.turn + ticks) ~on_tick:(fun _ _ -> ()) g p0 p1
+
+(** Play one match. Bots are consulted on turn 0 and every [interval] ticks —
+    the same cadence as the JavaScript runner's default. *)
+let play ?(size = 16) ?(max_turns = 500) ?(preset = "default") ?(interval = 20)
+    ?(on_tick = fun _ _ -> ()) (p0 : bot) (p1 : bot) =
+  let final = run ~interval ~stop:max_int ~on_tick (make_game ~size ~max_turns ~preset ()) p0 p1 in
   { winner = final.winner; turns = final.turn;
     final_reason = final.reason; final }

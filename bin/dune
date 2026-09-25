@@ -1,9 +1,14 @@
 (executable
  (name main)
  (modules main)
- (libraries rtsarena rts1))
+ (libraries rtsarena rts1 search))
 
 (executable
  (name rts_bot)
  (modules rts_bot)
- (libraries rtsarena rts1))
+ (libraries rtsarena rts1 search))
+
+(executable
+ (name bench)
+ (modules bench)
+ (libraries unix rtsarena rts1 search))

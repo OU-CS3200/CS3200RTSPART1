@@ -1,5 +1,11 @@
 (test
  (name test_rts1)
+ (modules test_rts1)
  (deps
   (glob_files %{project_root}/student/*.ml))
  (libraries alcotest rtsarena rts1))
+
+(test
+ (name test_rts3)
+ (modules test_rts3)
+ (libraries alcotest unix rtsarena rts1 search))
