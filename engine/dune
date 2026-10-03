@@ -1,0 +1,6 @@
+; The RTSArena engine, vendored from github.com/OU-CS3200/cs3200 (OCaml/RTSArena).
+; RTS-1: read it, do not edit it.
+(library
+ (name rtsarena)
+ (modules rtsarena json)
+ (wrapped false))

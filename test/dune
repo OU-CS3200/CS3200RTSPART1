@@ -1,0 +1,5 @@
+(test
+ (name test_rts1)
+ (deps
+  (glob_files %{project_root}/student/*.ml))
+ (libraries alcotest rtsarena rts1))
