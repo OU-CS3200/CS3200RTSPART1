@@ -96,20 +96,26 @@ dune exec test/test_rts1.exe -- test bot
 
 Write your answers in this file, under this heading, replacing the prompts.
 
-1. **(4 pts) Your eval.** List your features and weights, and give your eval's
-   prediction rate from the test output. Then find **one** game where your eval
-   was confidently wrong at turn 100 (use `play … --show`, or write a few lines
-   in `utop`), and explain why it was wrong.
+1. Feature: army weight: 4.0
+   Feature: economy weight: 0.1
+   Feature: workers weight: 0.0
+   Feature: hp weight: 0.1
+   Feature: base weight: 4.0
+   Feature: barracks weight: 0.1
+   Prediction rate 83%.
+   One game where confidently wrong at turn 100 is random (player 0) vs turtle (player 1). At turn 100, eval was at +18.8, but turle won at 175. It was wrong because eval counts how much army cost and total health. So the cost of the heavies and the health look a lot stronger than the rangers. But eval can't account for the rangers shoot from 4 tiles and can back off. Eval doesn't have enough information to know how rangers and heavy fight and just get a score stronger from their cost.
 
-2. **(4 pts) The impure bot.** `type bot = view -> order list` looks like a pure
-   function. One of the built-in bots in `engine/rtsarena.ml` is not. Name it,
-   show two calls with the same arguments that give different results (paste
-   the `utop` session), and say what would have to change in its *type* to make
-   it honest about what it does. (The runner in `bin/main.ml` works around this
-   — find how.)
+2. The impure bot is the "Random_bot". With two calls with the same arguments you get different results. Shown below:
+utop # b v;;
+- : order list =
+[Harvest_with 3; Build_barracks; Train (Light, 1); Attack (13, 14)]
+─( 16:28:52 )─< command 5 >───────────────────────────────────────────{ counter: 0 }─
+utop # b v;;
+- : order list = [Harvest_with 1; Train (Heavy, 1); Defend]
 
-3. **(2 pts) Your bot.** In three or four sentences: what is its plan, and which
-   rush does it lose to, and why?
+This is because it has a hidden counter called "state" that changed with each call. For it to change it would have to be something more like this: view -> int -> order list * int" so it takes in the counter and gives the new value with the order list directly with the counter. No changing the state behind the scenes. The bin/main.ml works around it by building a brand new random bot for each match. That way it starts from the same seed.
+
+3. My bots orders are two workers gathering, builds a barrack first, then trains one heavy every round & a worker tell I have four workers. It attacks as soon as it has two soldiers. The extra workers I us as cheap fighters. My-bot beats all the built in bots, but I suspect on a bigger map my plan would fail. The ranged-rush would be able to take down my heavies.
 
 ## Collaboration and AI
 
@@ -121,4 +127,4 @@ results — the numbers and the games you found.
 
 ## README (collaboration / AI use)
 
-*Name, Ohio ID, who you talked to, and what AI tools you used for what.*
+Jt Hepke, jh639423, I talked to nobody, And I used Chatgpt to help me understand the project and little pieces of ocaml basics. Claude helped me with bits and peices in eval and helped me tune my weights to get my percentage above 80.
