@@ -40,11 +40,21 @@ let attack_enemy : rule = fun v ->
 
 (* ---- Your bot ------------------------------------------------------- *)
 
-let economy : rule = always [ Harvest_with 2 ]
+let economy : rule = always [ Harvest_with 2 ] (*2 workers always gather*)
 
 let production : rule =
-  first_of [ when_ (fun v -> not (has_barracks v)) [ Build_barracks ] ]
+  first_of [ 
+    when_ (fun v -> not (has_barracks v)) [ Build_barracks ]; (*No barracks, build one*)
+    when_ (fun v -> count_of v Worker < 4) (*whens there is less than 4 workers*)
+      [Train (Worker, 1); Train (Heavy, 1) ]; (*train worker and heavy*)
+    always [ Train (Heavy, 1)] (*otherwise one heavy per turn*)
+  ]
 
-let posture : rule = always [ Defend ]
+let posture : rule = 
+  first_of
+    [
+      guard (fun v -> army v >= 2) attack_enemy; (*if you have 2 or more solfiers, attack them*)
+      always [Defend] (*fewer stay home*)
+    ]
 
 let my_bot : bot = fun v -> to_bot (all_of [ economy; production; posture ]) v
