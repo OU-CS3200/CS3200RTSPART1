@@ -2,8 +2,8 @@
    RTS-1, Part C2 — Your bot (25 pts)
 
    Fill in your name and Ohio ID: *)
-let name = "YOUR NAME"
-let id = "YOUR OHIO ID"
+let name = "Jt Hepke"
+let id = "jh639423@ohio.edu"
 
 (* Build [my_bot] out of the combinators in rules.ml and the queries in
    queries.ml. Two rules for this file:
