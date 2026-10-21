@@ -12,11 +12,11 @@ open Search
 let opponents = [ ("my-bot", Bot.my_bot); ("light-rush", light_rush);
                   ("heavy-rush", heavy_rush); ("ranged-rush", ranged_rush) ]
 
-let row ~ticks ~cache =
+let row ~(ticks : int) ~(cache : bool) : unit =
   Memo.stats.hits <- 0;
   Memo.stats.misses <- 0;
   let consults = ref 0 and seconds = ref 0.0 and wins = ref 0 in
-  let timed (b : bot) : bot = fun v ->
+  let timed (b : bot) : bot = fun (v : view) ->
     let t0 = Unix.gettimeofday () in
     let o = b v in
     seconds := !seconds +. (Unix.gettimeofday () -. t0);
@@ -24,7 +24,7 @@ let row ~ticks ~cache =
     o
   in
   List.iter
-    (fun (_, opp) ->
+    (fun ((_, opp) : string * bot) ->
        if (play (timed (Search_bot.make ~ticks ~cache ())) opp).winner = 0 then incr wins;
        if (play opp (timed (Search_bot.make ~ticks ~cache ()))).winner = 1 then incr wins)
     opponents;
@@ -39,4 +39,4 @@ let row ~ticks ~cache =
 let () =
   print_endline "| ticks | cache | ms / consultation | hit rate | wins |";
   print_endline "| ---: | :--- | ---: | ---: | ---: |";
-  List.iter (fun ticks -> row ~ticks ~cache:false; row ~ticks ~cache:true) [ 20; 50; 100 ]
+  List.iter (fun (ticks : int) -> row ~ticks ~cache:false; row ~ticks ~cache:true) [ 20; 50; 100 ]

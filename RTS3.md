@@ -119,6 +119,20 @@ what each building is making, the order the engine keeps entities in, and the id
 the next unit will get. `bin/rts_bot.ml` already reads all of it. Question 3
 below asks why each one is there.
 
+**The RTSArena League: your entry is your ticket.** After grading, every entry
+also plays in the class league: a nightly ladder with Elo ratings and browser
+replays, badges for beating each built-in bot, and a finals watch party in class
+for the top 8. The league never changes your RTS-3 grade, which comes only from
+the round robin above. You may push a `league` tag to keep improving your bot
+during the ladder. The leaderboard shows a handle, never your name: to pick
+one, add `bin/league.json` with `{"handle": "...", "color": "#rrggbb"}`.
+Submitting counts as entering. To opt out, put this line at the top of this
+file:
+
+```
+League: out
+```
+
 ## Part D — answer here (10 pts)
 
 1. **(4 pts) A loss.** Find a game your search bot lost to a bot it should

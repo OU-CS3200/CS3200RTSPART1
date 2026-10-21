@@ -42,28 +42,28 @@ type stats = {
 (* These values mirror UNIT_STATS / BUILDING_STATS in game-engine.js, which is
    the single source of truth for balance. The tables printed in
    SUBPROCESS_PROTOCOL.md and CLAUDE.md are stale — see docs/index.html. *)
-let unit_stats = function
+let unit_stats : unit_type -> stats = function
   | Worker -> { hp = 1;  cost = 1; build_ticks = 4; speed = 1; damage = 1; range = 1 }
   | Light  -> { hp = 5;  cost = 2; build_ticks = 4; speed = 2; damage = 3; range = 1 }
   | Heavy  -> { hp = 10; cost = 3; build_ticks = 6; speed = 1; damage = 4; range = 1 }
   | Ranged -> { hp = 3;  cost = 2; build_ticks = 6; speed = 1; damage = 1; range = 4 }
 
-let building_stats = function
+let building_stats : building_type -> stats = function
   | Base     -> { hp = 10; cost = 10; build_ticks = 15; speed = 0; damage = 0; range = 0 }
   | Barracks -> { hp = 5;  cost = 5;  build_ticks = 10; speed = 0; damage = 0; range = 0 }
 
-let stats_of_kind = function U u -> unit_stats u | B b -> building_stats b
+let stats_of_kind : kind -> stats = function U u -> unit_stats u | B b -> building_stats b
 
-let string_of_unit_type = function
+let string_of_unit_type : unit_type -> string = function
   | Worker -> "worker" | Light -> "light" | Heavy -> "heavy" | Ranged -> "ranged"
 
-let string_of_building_type = function Base -> "base" | Barracks -> "barracks"
+let string_of_building_type : building_type -> string = function Base -> "base" | Barracks -> "barracks"
 
-let string_of_kind = function
+let string_of_kind : kind -> string = function
   | U u -> string_of_unit_type u
   | B b -> string_of_building_type b
 
-let unit_type_of_string = function
+let unit_type_of_string : string -> unit_type option = function
   | "worker" -> Some Worker | "light" -> Some Light
   | "heavy"  -> Some Heavy  | "ranged" -> Some Ranged
   | _ -> None
@@ -96,10 +96,10 @@ type entity = {
   producing : (unit_type * int) option;  (** what a building is making, ticks left *)
 }
 
-let is_building e = match e.kind with B _ -> true | U _ -> false
-let is_worker e = e.kind = U Worker
+let is_building (e : entity) : bool = match e.kind with B _ -> true | U _ -> false
+let is_worker (e : entity) : bool = e.kind = U Worker
 
-let make_entity id kind player x y =
+let make_entity (id : int) (kind : kind) (player : int) (x : int) (y : int) : entity =
   let s = stats_of_kind kind in
   { id; kind; player; x; y;
     hp = s.hp; max_hp = s.hp;
@@ -145,58 +145,63 @@ type event =
   | Built of { player : int; what : building_type; x : int; y : int }
   | Destroyed of { player : int; what : kind }
 
-let resources_of g p = let a, b = g.resources in if p = 0 then a else b
+let resources_of (g : game) (p : int) : int =
+  let a, b = g.resources in if p = 0 then a else b
 
-let set_resources g p v =
+let set_resources (g : game) (p : int) (v : int) : game =
   let a, b = g.resources in
   { g with resources = (if p = 0 then (v, b) else (a, v)) }
 
-let spend g p n = set_resources g p (resources_of g p - n)
+let spend (g : game) (p : int) (n : int) : game = set_resources g p (resources_of g p - n)
 
-let in_bounds g x y = x >= 0 && x < g.size && y >= 0 && y < g.size
-let dist a b = abs (a.x - b.x) + abs (a.y - b.y)
-let dist_xy x1 y1 x2 y2 = abs (x1 - x2) + abs (y1 - y2)
+let in_bounds (g : game) (x : int) (y : int) : bool =
+  x >= 0 && x < g.size && y >= 0 && y < g.size
+let dist (a : entity) (b : entity) : int = abs (a.x - b.x) + abs (a.y - b.y)
+let dist_xy (x1 : int) (y1 : int) (x2 : int) (y2 : int) : int =
+  abs (x1 - x2) + abs (y1 - y2)
 
-let cell_at g x y = if in_bounds g x y then g.terrain.(y).(x) else Wall
+let cell_at (g : game) (x : int) (y : int) : cell =
+  if in_bounds g x y then g.terrain.(y).(x) else Wall
 
 (** A tile still worth walking to: marked [Resource] and not yet exhausted. *)
-let has_resource g x y =
+let has_resource (g : game) (x : int) (y : int) : bool =
   cell_at g x y = Resource
   && (match PosMap.find_opt (x, y) g.res with Some n -> n > 0 | None -> false)
 
-let occupied ?(except = -1) g x y =
+let occupied ?(except : int = -1) (g : game) (x : int) (y : int) : bool =
   cell_at g x y = Wall
-  || List.exists (fun e -> e.x = x && e.y = y && e.id <> except) g.entities
+  || List.exists (fun (e : entity) -> e.x = x && e.y = y && e.id <> except) g.entities
 
-let entities_of g ?kind ?building player =
+let entities_of (g : game) ?(kind : kind option) ?(building : bool option) (player : int)
+    : entity list =
   List.filter
-    (fun e ->
+    (fun (e : entity) ->
        e.player = player
        && (match kind with None -> true | Some k -> e.kind = k)
        && (match building with None -> true | Some b -> is_building e = b))
     g.entities
 
-let find_building g player bt =
-  List.find_opt (fun e -> e.player = player && e.kind = B bt) g.entities
+let find_building (g : game) (player : int) (bt : building_type) : entity option =
+  List.find_opt (fun (e : entity) -> e.player = player && e.kind = B bt) g.entities
 
-let next_id g = g.next_id
-let size g = g.size
-let turn g = g.turn
-let max_turns g = g.max_turns
-let entities g = g.entities
-let is_over g = g.over
-let winner g = g.winner
-let reason g = g.reason
-let with_entities g ents = { g with entities = ents }
+let next_id (g : game) : int = g.next_id
+let size (g : game) : int = g.size
+let turn (g : game) : int = g.turn
+let max_turns (g : game) : int = g.max_turns
+let entities (g : game) : entity list = g.entities
+let is_over (g : game) : bool = g.over
+let winner (g : game) : int = g.winner
+let reason (g : game) : string = g.reason
+let with_entities (g : game) (ents : entity list) : game = { g with entities = ents }
 
-let resource_left g x y =
+let resource_left (g : game) (x : int) (y : int) : int =
   match PosMap.find_opt (x, y) g.res with Some n -> n | None -> 0
 
 (* ---- map presets -------------------------------------------------- *)
 
 (* Mirrors MAP_PRESETS_BY_SIZE. Each listed tile is placed, then mirrored
    through the centre so both players face the same map. *)
-let preset_resources size preset =
+let preset_resources (size : int) (preset : string) : (int * int) list * int =
   match size, preset with
   | 8, "rich"      -> [ 1,1; 2,0; 0,2; 3,3; 2,2; 1,3; 3,1 ], 10
   | 8, "sparse"    -> [ 3,3; 2,2 ], 10
@@ -209,26 +214,27 @@ let preset_resources size preset =
                         14,3; 3,14; 8,15; 15,8 ], 20
   | _              -> [ 2,2; 5,5 ], 10
 
-let preset_walls size preset =
+let preset_walls (size : int) (preset : string) : (int * int) list =
   match size, preset with
   | 8, "corridors"  -> [ 3,1; 3,2; 4,5; 4,6 ]
   | 16, "corridors" -> [ 7,3; 7,4; 7,5; 8,11; 8,10; 8,9 ]
   | _ -> []
 
 (** Build the starting position: a mirrored map, one base and two workers each. *)
-let make_game ?(size = 16) ?(max_turns = 500) ?(preset = "default") () =
+let make_game ?(size : int = 16) ?(max_turns : int = 500) ?(preset : string = "default") ()
+    : game =
   let terrain = Array.make_matrix size size Empty in
   let tiles, amount = preset_resources size preset in
   let res = ref PosMap.empty in
-  let place x y =
+  let place (x : int) (y : int) : unit =
     if x >= 0 && x < size && y >= 0 && y < size then begin
       terrain.(y).(x) <- Resource;
       res := PosMap.add (x, y) amount !res
     end
   in
-  List.iter (fun (rx, ry) -> place rx ry; place (size - 1 - rx) (size - 1 - ry)) tiles;
+  List.iter (fun ((rx, ry) : int * int) -> place rx ry; place (size - 1 - rx) (size - 1 - ry)) tiles;
   List.iter
-    (fun (wx, wy) ->
+    (fun ((wx, wy) : int * int) ->
        if wx >= 0 && wx < size && wy >= 0 && wy < size then
          terrain.(wy).(wx) <- Wall;
        let mx = size - 1 - wx and my = size - 1 - wy in
@@ -249,18 +255,21 @@ let make_game ?(size = 16) ?(max_turns = 500) ?(preset = "default") () =
 
 (** Rebuild a game from the wire. The arrays are copied: the caller keeps
     theirs, and the game owns its own. *)
-let of_snapshot ?next_id ~size ~max_turns ~turn ~terrain ~amounts ~resources ents =
-  let get a y x = if y < Array.length a && x < Array.length a.(y) then a.(y).(x) else Empty in
-  let terrain = Array.init size (fun y -> Array.init size (fun x -> get terrain y x)) in
+let of_snapshot ?(next_id : int option) ~(size : int) ~(max_turns : int) ~(turn : int)
+    ~(terrain : cell array array) ~(amounts : int array array) ~(resources : int * int)
+    (ents : entity list) : game =
+  let get (a : cell array array) (y : int) (x : int) : cell =
+    if y < Array.length a && x < Array.length a.(y) then a.(y).(x) else Empty in
+  let terrain = Array.init size (fun (y : int) -> Array.init size (fun (x : int) -> get terrain y x)) in
   let res = ref PosMap.empty in
   Array.iteri
-    (fun y row -> Array.iteri (fun x n -> if n > 0 && x < size && y < size then
+    (fun (y : int) (row : int array) -> Array.iteri (fun (x : int) (n : int) -> if n > 0 && x < size && y < size then
                                   res := PosMap.add (x, y) n !res) row)
     amounts;
   let next_id =
     match next_id with
     | Some n -> n
-    | None -> List.fold_left (fun m e -> max m (e.id + 1)) 10_000 ents
+    | None -> List.fold_left (fun (m : int) (e : entity) -> max m (e.id + 1)) 10_000 ents
   in
   { size; max_turns; turn; entities = ents; resources; terrain; res = !res;
     next_id; over = false; winner = -1; reason = "" }
@@ -274,7 +283,8 @@ let of_snapshot ?next_id ~size ~max_turns ~turn ~terrain ~amounts ~resources ent
     Returns the neighbour of [(sx,sy)] to step onto, or [None] when the target
     is unreachable. Occupied cells are impassable, except the target itself —
     so a unit can walk up to something and stop next to it. *)
-let bfs_next_step g (sx, sy) (tx, ty) id =
+let bfs_next_step (g : game) ((sx, sy) : int * int) ((tx, ty) : int * int) (id : int)
+    : (int * int) option =
   if sx = tx && sy = ty then None
   else begin
     let n = g.size in
@@ -287,7 +297,7 @@ let bfs_next_step g (sx, sy) (tx, ty) id =
     while (not !found) && not (Queue.is_empty q) do
       let cx, cy = Queue.pop q in
       List.iter
-        (fun (dx, dy) ->
+        (fun ((dx, dy) : int * int) ->
            if not !found then begin
              let nx = cx + dx and ny = cy + dy in
              if in_bounds g nx ny
@@ -318,8 +328,8 @@ let bfs_next_step g (sx, sy) (tx, ty) id =
   end
 
 (** Take up to [speed] steps toward a target. Returns the moved entity. *)
-let move_toward g e (tx, ty) =
-  let rec go e n =
+let move_toward (g : game) (e : entity) ((tx, ty) : int * int) : entity =
+  let rec go (e : entity) (n : int) : entity =
     if n = 0 then e
     else
       match bfs_next_step g (e.x, e.y) (tx, ty) e.id with
@@ -331,19 +341,19 @@ let move_toward g e (tx, ty) =
 
 (** The first free cell around [(x,y)], used for placing produced units and
     new buildings. Mirrors findBuildSpot's search order. *)
-let find_build_spot g x y =
+let find_build_spot (g : game) (x : int) (y : int) : (int * int) option =
   let dirs = [ (1,0);(0,1);(-1,0);(0,-1);(1,1);(-1,1);(1,-1);(-1,-1);
                (2,0);(0,2);(-2,0);(0,-2) ] in
   List.find_map
-    (fun (dx, dy) ->
+    (fun ((dx, dy) : int * int) ->
        let nx = x + dx and ny = y + dy in
        if in_bounds g nx ny && (not (occupied g nx ny)) && cell_at g nx ny = Empty
        then Some (nx, ny) else None)
     dirs
 
-let nearest_resource g x y =
+let nearest_resource (g : game) (x : int) (y : int) : (int * int) option =
   PosMap.fold
-    (fun (rx, ry) amount best ->
+    (fun ((rx, ry) : int * int) (amount : int) (best : ((int * int) * int) option) ->
        if amount <= 0 then best
        else
          let d = dist_xy rx ry x y in
@@ -360,16 +370,16 @@ let nearest_resource g x y =
 (* Replace an entity in the world by id. Entities are resolved one at a time,
    each seeing the effects of the ones before it — the same sequential
    resolution the JavaScript engine gets from mutating in place. *)
-let replace g e =
-  { g with entities = List.map (fun o -> if o.id = e.id then e else o) g.entities }
+let replace (g : game) (e : entity) : game =
+  { g with entities = List.map (fun (o : entity) -> if o.id = e.id then e else o) g.entities }
 
-let damage_entity g id amount =
+let damage_entity (g : game) (id : int) (amount : int) : game =
   { g with
     entities =
-      List.map (fun o -> if o.id = id then { o with hp = o.hp - amount } else o)
+      List.map (fun (o : entity) -> if o.id = id then { o with hp = o.hp - amount } else o)
         g.entities }
 
-let step_building g e evs =
+let step_building (g : game) (e : entity) (evs : event list) : game * event list =
   match e.producing with
   | None -> (g, evs)
   | Some (what, ticks_left) ->
@@ -384,7 +394,8 @@ let step_building g e evs =
          ({ g with entities = g.entities @ [ baby ]; next_id = g.next_id + 1 },
           Produced { player = e.player; what; x = nx; y = ny } :: evs))
 
-let step_harvest g e remembered evs =
+let step_harvest (g : game) (e : entity) (remembered : (int * int) option)
+    (evs : event list) : game * event list =
   if e.carrying > 0 then
     (* carrying: walk home and drop it off *)
     match find_building g e.player Base with
@@ -418,13 +429,13 @@ let step_harvest g e remembered evs =
 
 (* Ranged units kite: after firing they back away from an adjacent slow melee
    unit, which is what makes range 4 worth having. *)
-let kite g e pool =
+let kite (g : game) (e : entity) (pool : entity list) : entity =
   if e.range <= 1 then e
   else
-    let melee = List.filter (fun en -> en.range <= 1 && en.speed < 2) pool in
+    let melee = List.filter (fun (en : entity) -> en.range <= 1 && en.speed < 2) pool in
     let nearest =
       List.fold_left
-        (fun best m ->
+        (fun (best : (entity * int) option) (m : entity) ->
            let d = dist e m in
            match best with Some (_, bd) when bd <= d -> best | _ -> Some (m, d))
         None melee
@@ -433,9 +444,9 @@ let kite g e pool =
     | Some (m, d) when d <= e.range + 2 ->
       (* RTS-2 fix: a retreat step is a move like any other — it must land
          on the board, off a wall, and on a free cell. *)
-      let sgn v = compare v 0 in
+      let sgn (v : int) : int = compare v 0 in
       let dx = sgn (e.x - m.x) and dy = sgn (e.y - m.y) in
-      let free x y =
+      let free (x : int) (y : int) : bool =
         in_bounds g x y && cell_at g x y <> Wall && not (occupied ~except:e.id g x y) in
       if dx <> 0 && free (e.x + dx) e.y then { e with x = e.x + dx }
       else if dy <> 0 && free e.x (e.y + dy) then { e with y = e.y + dy }
@@ -444,16 +455,16 @@ let kite g e pool =
 
 (* Who [e] would shoot at, and the pool it chose from. Ties go to the
    smaller id, so the choice does not depend on list order. *)
-let choose_target g e =
-  let enemies = List.filter (fun en -> en.player <> e.player && en.hp > 0) g.entities in
+let choose_target (g : game) (e : entity) : (entity * int) option * entity list =
+  let enemies = List.filter (fun (en : entity) -> en.player <> e.player && en.hp > 0) g.entities in
   (* prefer real soldiers; fall back to whatever is left *)
   let military =
-    List.filter (fun en -> (not (is_building en)) && not (is_worker en)) enemies
+    List.filter (fun (en : entity) -> (not (is_building en)) && not (is_worker en)) enemies
   in
   let pool = if military <> [] then military else enemies in
   let nearest =
     List.fold_left
-      (fun best en ->
+      (fun (best : (entity * int) option) (en : entity) ->
          let d = dist e en in
          match best with
          | Some (b, bd) when (bd, b.id) <= (d, en.id) -> best
@@ -467,9 +478,9 @@ let choose_target g e =
    lands together at the end. A unit that dies this tick still fires. The
    old engine resolved one entity at a time, so whoever came first in the
    entity list could kill a unit before it hit back. *)
-let volleys g =
+let volleys (g : game) : (entity * entity) list =
   List.filter_map
-    (fun e ->
+    (fun (e : entity) ->
        match e.action with
        | Some (Attack_at _) when not (is_building e) ->
          (match choose_target g e with
@@ -478,7 +489,8 @@ let volleys g =
        | _ -> None)
     g.entities
 
-let step_attack g e ax ay ~fired evs =
+let step_attack (g : game) (e : entity) (ax : int) (ay : int) ~(fired : int list)
+    (evs : event list) : game * event list =
   let nearest, pool = choose_target g e in
   if List.mem e.id fired then (replace g (kite g e pool), evs)
   else
@@ -489,10 +501,10 @@ let step_attack g e ax ay ~fired evs =
 (* RTS-2 fix: the builder used to walk onto the site itself (a path may end
    on its target) and the building then appeared on top of it. Now it steps
    off the site, and a building only completes on a free cell. *)
-let step_off g e =
+let step_off (g : game) (e : entity) : entity =
   match
     List.find_opt
-      (fun (dx, dy) ->
+      (fun ((dx, dy) : int * int) ->
          let nx = e.x + dx and ny = e.y + dy in
          in_bounds g nx ny && cell_at g nx ny <> Wall && not (occupied ~except:e.id g nx ny))
       [ (1, 0); (0, 1); (-1, 0); (0, -1) ]
@@ -500,7 +512,8 @@ let step_off g e =
   | Some (dx, dy) -> { e with x = e.x + dx; y = e.y + dy }
   | None -> e
 
-let step_build g e bt bx by progress evs =
+let step_build (g : game) (e : entity) (bt : building_type) (bx : int) (by : int)
+    (progress : int) (evs : event list) : game * event list =
   if e.x = bx && e.y = by then (replace g (step_off g e), evs)
   else if dist_xy e.x e.y bx by <= 1 && occupied ~except:e.id g bx by then (g, evs)
   else if dist_xy e.x e.y bx by <= 1 then
@@ -514,9 +527,10 @@ let step_build g e bt bx by progress evs =
       (replace g { e with action = Some (Building_it { btype = bt; bx; by; progress }) }, evs)
   else (replace g (move_toward g e (bx, by)), evs)
 
-let step_entity ~fired (g, evs) id =
+let step_entity ~(fired : int list) ((g, evs) : game * event list) (id : int)
+    : game * event list =
   (* look the entity up again: an earlier entity this tick may have killed it *)
-  match List.find_opt (fun e -> e.id = id && e.hp > 0) g.entities with
+  match List.find_opt (fun (e : entity) -> e.id = id && e.hp > 0) g.entities with
   | None -> (g, evs)
   | Some e ->
     if is_building e then step_building g e evs
@@ -531,10 +545,12 @@ let step_entity ~fired (g, evs) id =
       | Some (Building_it { btype; bx; by; progress }) ->
         step_build g e btype bx by progress evs
 
-let check_game_over g =
-  let alive p = List.filter (fun e -> e.player = p) g.entities in
+let check_game_over (g : game) : game =
+  let alive (p : int) : entity list =
+    List.filter (fun (e : entity) -> e.player = p) g.entities in
   let p0 = alive 0 and p1 = alive 1 in
-  let total_hp l = List.fold_left (fun s e -> s + e.hp) 0 l in
+  let total_hp (l : entity list) : int =
+    List.fold_left (fun (s : int) (e : entity) -> s + e.hp) 0 l in
   if p0 = [] && p1 = [] then
     { g with over = true; winner = -1; reason = "Mutual destruction" }
   else if p0 = [] then { g with over = true; winner = 1; reason = "All Blue forces destroyed" }
@@ -547,26 +563,26 @@ let check_game_over g =
   else g
 
 (** Advance the world one tick. Pure: the argument is untouched. *)
-let step g =
+let step (g : game) : game * event list =
   if g.over then (g, [])
   else begin
     let g = { g with turn = g.turn + 1 } in
     let shots = volleys g in
-    let fired = List.map (fun (a, _) -> a.id) shots in
-    let ids = List.map (fun e -> e.id) g.entities in
+    let fired = List.map (fun ((a, _) : entity * entity) -> a.id) shots in
+    let ids = List.map (fun (e : entity) -> e.id) g.entities in
     let g, evs = List.fold_left (step_entity ~fired) (g, []) ids in
-    let g = List.fold_left (fun g (a, t) -> damage_entity g t.id a.damage) g shots in
+    let g = List.fold_left (fun (g : game) ((a, t) : entity * entity) -> damage_entity g t.id a.damage) g shots in
     let evs =
       List.rev_map
-        (fun (a, t) -> Combat { attacker = a.id; target = t.id; damage = a.damage }) shots
+        (fun ((a, t) : entity * entity) -> Combat { attacker = a.id; target = t.id; damage = a.damage }) shots
       @ evs
     in
-    let dead = List.filter (fun e -> e.hp <= 0) g.entities in
+    let dead = List.filter (fun (e : entity) -> e.hp <= 0) g.entities in
     let evs =
       List.fold_left
-        (fun acc d -> Destroyed { player = d.player; what = d.kind } :: acc) evs dead
+        (fun (acc : event list) (d : entity) -> Destroyed { player = d.player; what = d.kind } :: acc) evs dead
     in
-    let g = { g with entities = List.filter (fun e -> e.hp > 0) g.entities } in
+    let g = { g with entities = List.filter (fun (e : entity) -> e.hp > 0) g.entities } in
     (check_game_over g, List.rev evs)
   end
 
@@ -584,7 +600,7 @@ type order =
   | Defend
   | Retreat
 
-let string_of_order = function
+let string_of_order : order -> string = function
   | Harvest_with n -> Printf.sprintf "harvest %d" n
   | Build_barracks -> "build barracks"
   | Train (u, n) -> Printf.sprintf "train %d %s" n (string_of_unit_type u)
@@ -593,26 +609,26 @@ let string_of_order = function
   | Retreat -> "retreat"
 
 (* Turn standing orders into per-unit actions. Mirrors TacticalAI.execute. *)
-let apply_orders g player orders =
+let apply_orders (g : game) (player : int) (orders : order list) : game =
   let harvest_count =
-    List.fold_left (fun acc o -> match o with Harvest_with n -> n | _ -> acc) 0 orders
+    List.fold_left (fun (acc : int) (o : order) -> match o with Harvest_with n -> n | _ -> acc) 0 orders
   in
-  let wants_barracks = List.exists (fun o -> o = Build_barracks) orders in
+  let wants_barracks = List.exists (fun (o : order) -> o = Build_barracks) orders in
   let trains =
     List.filter_map (function Train (u, n) -> Some (u, n) | _ -> None) orders
   in
   let attack_at =
-    List.fold_left (fun acc o -> match o with Attack (x, y) -> Some (x, y) | _ -> acc)
+    List.fold_left (fun (acc : (int * int) option) (o : order) -> match o with Attack (x, y) -> Some (x, y) | _ -> acc)
       None orders
   in
-  let defending = List.exists (fun o -> o = Defend) orders in
-  let retreating = List.exists (fun o -> o = Retreat) orders in
+  let defending = List.exists (fun (o : order) -> o = Defend) orders in
+  let retreating = List.exists (fun (o : order) -> o = Retreat) orders in
 
   (* --- workers to the mines --- *)
-  let workers = List.filter (fun e -> e.player = player && is_worker e) g.entities in
+  let workers = List.filter (fun (e : entity) -> e.player = player && is_worker e) g.entities in
   let g, _ =
     List.fold_left
-      (fun (g, assigned) w ->
+      (fun ((g, assigned) : game * int) (w : entity) ->
          if assigned >= harvest_count then (g, assigned)
          else
            match w.action with
@@ -629,7 +645,7 @@ let apply_orders g player orders =
       let have = entities_of g ~kind:(B Barracks) player <> [] in
       let building_one =
         List.exists
-          (fun w -> match w.action with Some (Building_it _) -> true | _ -> false)
+          (fun (w : entity) -> match w.action with Some (Building_it _) -> true | _ -> false)
           workers
       in
       if have || building_one || resources_of g player < (building_stats Barracks).cost
@@ -643,7 +659,7 @@ let apply_orders g player orders =
            | Some (bx, by) ->
              let builder =
                match List.find_opt
-                       (fun w -> match w.action with
+                       (fun (w : entity) -> match w.action with
                           | None | Some (Harvest _) -> true | _ -> false) workers with
                | Some w -> Some w
                | None -> (match workers with w :: _ -> Some w | [] -> None)
@@ -661,15 +677,15 @@ let apply_orders g player orders =
   (* --- production --- *)
   let g =
     List.fold_left
-      (fun g (what, count) ->
+      (fun (g : game) ((what, count) : unit_type * int) ->
          let s = unit_stats what in
          let producer_kind = if what = Worker then B Base else B Barracks in
-         let rec queue g n =
+         let rec queue (g : game) (n : int) : game =
            if n <= 0 || resources_of g player < s.cost then g
            else
              match
                List.find_opt
-                 (fun b -> b.player = player && b.kind = producer_kind && b.producing = None)
+                 (fun (b : entity) -> b.player = player && b.kind = producer_kind && b.producing = None)
                  g.entities
              with
              | None -> g
@@ -682,10 +698,11 @@ let apply_orders g player orders =
   in
 
   (* --- army posture --- *)
-  let mine () = List.filter (fun e -> e.player = player && not (is_building e)) g.entities in
-  let combat_units () =
+  let mine () : entity list =
+    List.filter (fun (e : entity) -> e.player = player && not (is_building e)) g.entities in
+  let combat_units () : entity list =
     List.filter
-      (fun u -> (not (is_worker u))
+      (fun (u : entity) -> (not (is_worker u))
                 || match u.action with Some (Attack_at _) -> true | _ -> false)
       (mine ())
   in
@@ -694,7 +711,7 @@ let apply_orders g player orders =
     | None -> g
     | Some base ->
       List.fold_left
-        (fun g u ->
+        (fun (g : game) (u : entity) ->
            let keep_harvesting =
              is_worker u && (match u.action with Some (Harvest _) -> true | _ -> false)
            in
@@ -705,10 +722,10 @@ let apply_orders g player orders =
     match find_building g player Base with
     | None -> g
     | Some base ->
-      let enemies = List.filter (fun e -> e.player <> player && e.hp > 0) g.entities in
-      let near = List.find_opt (fun en -> dist en base <= 5) enemies in
+      let enemies = List.filter (fun (e : entity) -> e.player <> player && e.hp > 0) g.entities in
+      let near = List.find_opt (fun (en : entity) -> dist en base <= 5) enemies in
       List.fold_left
-        (fun g u ->
+        (fun (g : game) (u : entity) ->
            match u.action with
            | Some (Attack_at _) -> g
            | _ ->
@@ -728,13 +745,13 @@ let apply_orders g player orders =
     | None -> g
     | Some (ax, ay) ->
       let g =
-        List.fold_left (fun g u -> replace g { u with action = Some (Attack_at (ax, ay)) })
+        List.fold_left (fun (g : game) (u : entity) -> replace g { u with action = Some (Attack_at (ax, ay)) })
           g (combat_units ())
       in
       (* workers beyond the harvest quota join the push *)
-      let workers = List.filter (fun e -> e.player = player && is_worker e) g.entities in
+      let workers = List.filter (fun (e : entity) -> e.player = player && is_worker e) g.entities in
       List.fold_left
-        (fun (g, i) w ->
+        (fun ((g, i) : game * int) (w : entity) ->
            if i >= harvest_count then
              (replace g { w with action = Some (Attack_at (ax, ay)) }, i + 1)
            else (g, i + 1))
@@ -756,19 +773,19 @@ type view = {
   world : game;                          (** the whole world, read-only now *)
 }
 
-let view g player =
+let view (g : game) (player : int) : view =
   { v_turn = g.turn; v_max_turns = g.max_turns;
     my_resources = resources_of g player;
     enemy_resources = resources_of g (1 - player);
-    my_units = List.filter (fun e -> e.player = player) g.entities;
-    enemy_units = List.filter (fun e -> e.player <> player) g.entities;
+    my_units = List.filter (fun (e : entity) -> e.player = player) g.entities;
+    enemy_units = List.filter (fun (e : entity) -> e.player <> player) g.entities;
     v_size = g.size; world = g }
 
 (** The board as text, from [player]'s side: your pieces upper-case, theirs
     lower-case, [$] a resource tile, [#] a wall. This is exactly the rendering
     an LLM player is shown. *)
-let to_ascii g player =
-  let ch_of e =
+let to_ascii (g : game) (player : int) : string =
+  let ch_of (e : entity) : char =
     let c = match e.kind with
       | B Base -> 'B' | B Barracks -> 'K'
       | U Worker -> 'W' | U Light -> 'L' | U Heavy -> 'H' | U Ranged -> 'R'
@@ -784,7 +801,7 @@ let to_ascii g player =
       | Empty -> ()
     done
   done;
-  List.iter (fun e -> grid.(e.y).(e.x) <- ch_of e) g.entities;
+  List.iter (fun (e : entity) -> grid.(e.y).(e.x) <- ch_of e) g.entities;
   let buf = Buffer.create ((g.size + 4) * (g.size + 1)) in
   Buffer.add_string buf "   ";
   for x = 0 to g.size - 1 do Buffer.add_string buf (string_of_int (x mod 10)) done;
@@ -804,32 +821,32 @@ let to_ascii g player =
     the whole interface — no classes, no inheritance, no mutable state. *)
 type bot = view -> order list
 
-let has_barracks v =
-  List.exists (fun e -> e.kind = B Barracks) v.my_units
+let has_barracks (v : view) : bool =
+  List.exists (fun (e : entity) -> e.kind = B Barracks) v.my_units
 
-let enemy_target v =
-  let bases = List.filter (fun e -> e.kind = B Base) v.enemy_units in
+let enemy_target (v : view) : (int * int) option =
+  let bases = List.filter (fun (e : entity) -> e.kind = B Base) v.enemy_units in
   match bases, v.enemy_units with
   | b :: _, _ -> Some (b.x, b.y)
   | [], e :: _ -> Some (e.x, e.y)
   | [], [] -> None
 
-let count_of v u =
-  List.length (List.filter (fun e -> e.kind = U u) v.my_units)
+let count_of (v : view) (u : unit_type) : int =
+  List.length (List.filter (fun (e : entity) -> e.kind = U u) v.my_units)
 
-let attack_or_defend v ready =
+let attack_or_defend (v : view) (ready : bool) : order list =
   if ready then
     match enemy_target v with Some (x, y) -> [ Attack (x, y) ] | None -> [ Defend ]
   else [ Defend ]
 
 (* A rush: one barracks, then a stream of one unit type, attack at [n]. *)
-let rush_bot unit_type batch threshold : bot =
-  fun v ->
+let rush_bot (unit_type : unit_type) (batch : int) (threshold : int) : bot =
+  fun (v : view) ->
   Harvest_with 2
   :: (if has_barracks v then Train (unit_type, batch) else Build_barracks)
   :: attack_or_defend v (count_of v unit_type >= threshold)
 
-let worker_rush : bot = fun v ->
+let worker_rush : bot = fun (v : view) ->
   let cmds = [ Harvest_with 1; Train (Worker, 3) ] in
   if v.v_turn > 30 then
     match enemy_target v with Some (x, y) -> cmds @ [ Attack (x, y) ] | None -> cmds
@@ -839,7 +856,7 @@ let light_rush : bot = rush_bot Light 3 3
 let heavy_rush : bot = rush_bot Heavy 2 2
 let ranged_rush : bot = rush_bot Ranged 3 3
 
-let economy_boom : bot = fun v ->
+let economy_boom : bot = fun (v : view) ->
   if v.v_turn < 120 then
     [ Harvest_with 4; Train (Worker, 2);
       (if has_barracks v then Train (Light, 1) else Build_barracks); Defend ]
@@ -847,12 +864,12 @@ let economy_boom : bot = fun v ->
     Harvest_with 3 :: Train (Heavy, 2)
     :: attack_or_defend v (count_of v Heavy + count_of v Light >= 4)
 
-let turtle : bot = fun v ->
+let turtle : bot = fun (v : view) ->
   [ Harvest_with 3;
     (if has_barracks v then Train (Ranged, 2) else Build_barracks);
     Defend ]
 
-let balanced : bot = fun v ->
+let balanced : bot = fun (v : view) ->
   let army = count_of v Light + count_of v Heavy + count_of v Ranged in
   Harvest_with 3
   :: (if has_barracks v then Train ((if army land 1 = 0 then Light else Ranged), 2)
@@ -866,11 +883,11 @@ let balanced : bot = fun v ->
     each consultation reseeds from [(seed, turn)]: the same seed and the
     same board always give the same orders. The [ref] below is local to one
     call, so nobody can observe it. *)
-let random_bot seed : bot =
-  fun v ->
+let random_bot (seed : int) : bot =
+  fun (v : view) ->
     let state = ref (Hashtbl.hash (seed, v.v_turn)) in
-    let next () = state := ((!state * 1103515245) + 12345) land 0x3FFFFFFF; !state in
-    let r n = next () mod n in
+    let next () : int = state := ((!state * 1103515245) + 12345) land 0x3FFFFFFF; !state in
+    let r (n : int) : int = next () mod n in
     let cmds = [ Harvest_with (1 + r 3) ] in
     let cmds = if r 10 < 3 then cmds @ [ Build_barracks ] else cmds in
     let t = match r 4 with 0 -> Worker | 1 -> Light | 2 -> Heavy | _ -> Ranged in
@@ -891,8 +908,8 @@ let bots : (string * bot) list =
     "balanced", balanced;
     "random", random_bot 42 ]
 
-let bot_named name = List.assoc_opt name bots
-let bot_names () = List.map fst bots
+let bot_named (name : string) : bot option = List.assoc_opt name bots
+let bot_names () : string list = List.map fst bots
 
 (* ------------------------------------------------------------------ *)
 (* 9. Running a match                                                 *)
@@ -907,12 +924,13 @@ type result = {
 
 (** The game a view came from. Handing it out is safe: [game] is abstract
     and immutable, so a "fork" is the game itself — no copy needed. *)
-let fork v = v.world
+let fork (v : view) : game = v.world
 
 (* Consult the bots now, then every [interval] ticks, until [stop] or the
    end of the game. *)
-let run ~interval ~stop ~on_tick g (p0 : bot) (p1 : bot) =
-  let rec loop g since =
+let run ~(interval : int) ~(stop : int) ~(on_tick : game -> event list -> unit) (g : game)
+    (p0 : bot) (p1 : bot) : game =
+  let rec loop (g : game) (since : int) : game =
     if g.over || g.turn >= stop then g
     else
       let consult = since >= interval in
@@ -928,13 +946,14 @@ let run ~interval ~stop ~on_tick g (p0 : bot) (p1 : bot) =
   in
   loop g interval
 
-let rollout ?(interval = 20) g p0 p1 ~ticks =
-  run ~interval ~stop:(g.turn + ticks) ~on_tick:(fun _ _ -> ()) g p0 p1
+let rollout ?(interval : int = 20) (g : game) (p0 : bot) (p1 : bot) ~(ticks : int) : game =
+  run ~interval ~stop:(g.turn + ticks) ~on_tick:(fun (_ : game) (_ : event list) -> ()) g p0 p1
 
 (** Play one match. Bots are consulted on turn 0 and every [interval] ticks —
     the same cadence as the JavaScript runner's default. *)
-let play ?(size = 16) ?(max_turns = 500) ?(preset = "default") ?(interval = 20)
-    ?(on_tick = fun _ _ -> ()) (p0 : bot) (p1 : bot) =
+let play ?(size : int = 16) ?(max_turns : int = 500) ?(preset : string = "default")
+    ?(interval : int = 20) ?(on_tick : game -> event list -> unit = fun _ _ -> ())
+    (p0 : bot) (p1 : bot) : result =
   let final = run ~interval ~stop:max_int ~on_tick (make_game ~size ~max_turns ~preset ()) p0 p1 in
   { winner = final.winner; turns = final.turn;
     final_reason = final.reason; final }
