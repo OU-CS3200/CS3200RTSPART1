@@ -28,9 +28,10 @@ let stats = { hits = 0; misses = 0 }
 
 (** One chunk: both sides issue orders, then [len] ticks pass (fewer if the
     game ends first). Given. *)
-let chunk ~len g o0 o1 =
+let chunk ~(len : int) (g : game) (o0 : order list) (o1 : order list) : game =
   let g = apply_orders (apply_orders g 0 o0) 1 o1 in
-  let rec go g n = if n = 0 || is_over g then g else go (fst (step g)) (n - 1) in
+  let rec go (g : game) (n : int) : game =
+    if n = 0 || is_over g then g else go (fst (step g)) (n - 1) in
   go g len
 
 (** 1. (10 pts) [key ~len g o0 o1] names a chunk. Two chunks with the same
@@ -59,5 +60,6 @@ let key ~(len : int) (g : game) (o0 : order list) (o1 : order list) : string =
     - Count chunks rather than trusting [turn] to end the loop. A wrong key
       can hand back a game from an EARLIER turn, and a loop that waits for
       the turn to reach its target then never ends. *)
-let rollout_chunks ?(cache : (string, game) Hashtbl.t option) ~interval g p0 p1 ~ticks =
+let rollout_chunks ?(cache : (string, game) Hashtbl.t option) ~(interval : int) (g : game)
+    (p0 : bot) (p1 : bot) ~(ticks : int) : game =
   todo (cache, interval, g, p0, p1, ticks)

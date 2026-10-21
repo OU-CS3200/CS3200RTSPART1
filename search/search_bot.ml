@@ -28,8 +28,8 @@ open Rtsarena
 (** Which player the view belongs to. Given. *)
 let me_of (v : view) : int = match v.my_units with e :: _ -> e.player | [] -> 0
 
-let make ?(ticks = 100) ?(model = Bot.my_bot) ?(cache = true) () : bot =
-  fun v -> Bot.my_bot v
+let make ?(ticks : int = 100) ?(model : bot = Bot.my_bot) ?(cache : bool = true) () : bot =
+  fun (v : view) -> Bot.my_bot v
 
 (** Your tournament entry, and what [my-search] plays in the runner. Change
     its arguments if you want different settings. *)

@@ -23,8 +23,8 @@ open Rules
 
 (** Given: attack the enemy base, or whatever is left of the enemy. *)
 let attack_enemy : rule =
- fun v -> Option.map (fun (x, y) -> [ Attack (x, y) ]) (enemy_target v)
+ fun (v : view) -> Option.map (fun ((x, y) : int * int) -> [ Attack (x, y) ]) (enemy_target v)
 
-let army v = count_of v Light + count_of v Heavy + count_of v Ranged
+let army (v : view) : int = count_of v Light + count_of v Heavy + count_of v Ranged
 
 let candidates : (string * bot) list = [ ("my-bot", Bot.my_bot) ]
