@@ -1,0 +1,13 @@
+; `dune build` builds everything except vandal/, which is meant to fail to
+; compile once the engine is sealed. Build it on purpose with
+;   dune build ./vandal/vandal.exe
+(rule
+ (alias default)
+ (deps
+  (alias_rec engine/all)
+  (alias_rec student/all)
+  (alias_rec bin/all)
+  (alias_rec test/all)
+  (alias_rec props/all)
+  (alias_rec fixes/all))
+ (action (progn)))

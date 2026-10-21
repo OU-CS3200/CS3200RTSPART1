@@ -1,0 +1,4 @@
+; Part B: your tests for the four fixes. Run with  dune test fixes
+(test
+ (name test_fixes)
+ (libraries alcotest rtsarena))

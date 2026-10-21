@@ -1,0 +1,13 @@
+; Part C: your properties. Run with  dune test props
+(library
+ (name props)
+ (modules gen properties)
+ ; oneofl is deprecated in qcheck >= 0.90, and dune's dev profile turns that
+ ; alert into an error; oneof_list does not exist before 0.90. Same fix as PA1.
+ (flags (:standard -alert -deprecated))
+ (libraries qcheck-core rtsarena))
+
+(test
+ (name run_props)
+ (modules run_props)
+ (libraries qcheck-core qcheck-core.runner rtsarena props))

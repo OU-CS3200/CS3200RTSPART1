@@ -12,7 +12,7 @@ open Queries
 let blank = make_game ()
 
 (** A game on the default map holding exactly [ents]. *)
-let game_with ents = { blank with entities = ents }
+let game_with ents = with_entities blank ents
 
 let e id kind player x y = make_entity id kind player x y
 
@@ -151,7 +151,7 @@ let sample_positions =
           List.concat_map
             (fun b ->
                let acc = ref [] in
-               ignore (play ~on_tick:(fun g _ -> if g.turn mod 25 = 0 then acc := g :: !acc)
+               ignore (play ~on_tick:(fun g _ -> if turn g mod 25 = 0 then acc := g :: !acc)
                          (fresh a) (fresh b));
                !acc)
             [ "light-rush"; "turtle"; "economy-boom" ])
@@ -166,16 +166,16 @@ let test_eval_antisymmetric () =
        let a = Eval.eval (view g 0) and b = Eval.eval (view g 1) in
        if Float.abs (a +. b) > 1e-6 then
          failf "turn %d: player 0 sees %g, player 1 sees %g (should be negatives)"
-           g.turn a b)
+           (turn g) a b)
     (Lazy.force sample_positions)
 
 let test_eval_monotone () =
   let base = Eval.eval (view blank 0) in
-  let more = game_with (e 50 (U Heavy) 0 5 5 :: blank.entities) in
+  let more = game_with (e 50 (U Heavy) 0 5 5 :: entities blank) in
   (check bool) "an extra heavy of mine helps me" true (Eval.eval (view more 0) > base);
-  let theirs = game_with (e 50 (U Heavy) 1 10 10 :: blank.entities) in
+  let theirs = game_with (e 50 (U Heavy) 1 10 10 :: entities blank) in
   (check bool) "an extra heavy of theirs hurts me" true (Eval.eval (view theirs 0) < base);
-  let no_base = game_with (List.filter (fun x -> x.id <> 1) blank.entities) in
+  let no_base = game_with (List.filter (fun x -> x.id <> 1) (entities blank)) in
   (check bool) "losing my base hurts me" true (Eval.eval (view no_base 0) < base)
 
 (* Does the sign of eval at turn [at] predict who wins? Over every decisive
@@ -189,7 +189,7 @@ let prediction_rate ~at =
          (fun b ->
             if a <> b then begin
               let snap = ref None in
-              let r = play ~on_tick:(fun g _ -> if g.turn = at then snap := Some g)
+              let r = play ~on_tick:(fun g _ -> if turn g = at then snap := Some g)
                         (fresh a) (fresh b) in
               match !snap with
               | Some g when r.winner >= 0 ->
