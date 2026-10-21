@@ -64,6 +64,21 @@ make everything else build again.
 - **Your RTS-1 code in `student/` must compile without any change.** If it
   doesn't, your engine does not match the interface.
 
+**Getting started.** Abstract does not mean "no record". Keep
+`type game = { ... }` in `rtsarena.ml` as it is: the `.mli` hides its fields
+from everything outside the engine, and inside the engine you still write
+`g.turn`. What you add are the accessors the `.mli` lists, most of them one
+line:
+
+```ocaml
+let turn g = g.turn
+```
+
+Only `game` is hidden. `entity`, `view` and `stats` are still spelled out in
+the `.mli`, so `v.my_units` and `e.hp` work everywhere — which is why
+`student/` compiles unchanged. Those types must match the `.mli` exactly:
+`view`'s `v_game` field is now `world`. Then build, and work down the errors.
+
 When `dune build` is clean, try the vandal:
 
 ```
