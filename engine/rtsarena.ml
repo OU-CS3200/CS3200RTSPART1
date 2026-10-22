@@ -429,10 +429,10 @@ let kite g e pool =
     | Some (m, d) when d <= e.range + 2 ->
       let sgn v = compare v 0 in
       let dx = sgn (e.x - m.x) and dy = sgn (e.y - m.y) in
-      let clamp v = max 0 (min (g.size - 1) v) in
-      if dx <> 0 then { e with x = clamp (e.x + dx) }
-      else if dy <> 0 then { e with y = clamp (e.y + dy) }
-      else e
+      let free x y = in_bounds g x y && cell_at g x y <> Wall && not (occupied ~except:e.id g x y) in  (* is that square open? *)
+      if dx <> 0 && free (e.x + dx) e.y then { e with x = e.x + dx }  (* back away sideways, only if open *)
+      else if dy <> 0 && free e.x (e.y + dy) then { e with y = e.y + dy }  (* or up and down, only if open *)
+      else e  (* nowhere legal to go: stay put *)
     | _ -> e
 
 let step_attack g0 g e ax ay evs =
@@ -461,10 +461,16 @@ let step_build g e bt bx by progress evs =
   if dist_xy e.x e.y bx by <= 1 then
     let progress = progress + 1 in
     if progress >= (building_stats bt).build_ticks then
-      let b = make_entity g.next_id (B bt) e.player bx by in
-      let g = replace g { e with action = None } in
-      ({ g with entities = g.entities @ [ b ]; next_id = g.next_id + 1 },
-       Built { player = e.player; what = bt; x = bx; y = by } :: evs)
+      let spot_is_open = (not (occupied g bx by)) && cell_at g bx by = Empty in  (* is the planned square free? *)
+      let spot = if spot_is_open then Some (bx, by) else find_build_spot g bx by in  (* if not, look for a free one nearby *)
+      (match spot with
+       | None ->  (* no free square at all: keep waiting *)
+         (replace g { e with action = Some (Building_it { btype = bt; bx; by; progress }) }, evs)
+       | Some (sx, sy) ->  (* build on a free square *)
+         let b = make_entity g.next_id (B bt) e.player sx sy in
+         let g = replace g { e with action = None } in
+         ({ g with entities = g.entities @ [ b ]; next_id = g.next_id + 1 },
+          Built { player = e.player; what = bt; x = sx; y = sy } :: evs))
     else
       (replace g { e with action = Some (Building_it { btype = bt; bx; by; progress }) }, evs)
   else (replace g (move_toward g e (bx, by)), evs)
