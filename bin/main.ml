@@ -64,8 +64,8 @@ let cmd_play argv =
        let size, turns, preset, interval = common rest in
        let show = has_flag "show" rest and quiet = has_flag "quiet" rest in
        let on_tick g _ =
-         if show && g.turn mod 50 = 0 then begin
-           Printf.printf "\n-- turn %d --  resources %d / %d\n" g.turn
+         if show && turn g mod 50 = 0 then begin
+           Printf.printf "\n-- turn %d --  resources %d / %d\n" (turn g)
              (resources_of g 0) (resources_of g 1);
            print_string (to_ascii g 0)
          end

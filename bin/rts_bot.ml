@@ -61,7 +61,7 @@ let view_of_json j =
   let size = match terrain_rows with [] -> 16 | r :: _ -> List.length (Json.to_list r) in
   let size = if size = 0 then 16 else size in
   let terrain = Array.make_matrix size size Empty in
-  let res = ref PosMap.empty in
+  let amounts = Array.make_matrix size size 0 in
   List.iteri
     (fun y row ->
        List.iteri
@@ -78,7 +78,7 @@ let view_of_json j =
        List.iteri
          (fun x cell ->
             let n = Json.to_int cell in
-            if n > 0 && y < size && x < size then res := PosMap.add (x, y) n !res)
+            if n > 0 && y < size && x < size then amounts.(y).(x) <- n)
          (Json.to_list row))
     amount_rows;
   let mine = List.filter_map (entity_of_json 0) (Json.to_list (Json.member "myUnits" j)) in
@@ -90,17 +90,14 @@ let view_of_json j =
   let theirs = List.map (fun e -> { e with player = 1 }) theirs in
   let my_res = Json.int_field "myResources" j in
   let their_res = Json.int_field "enemyResources" j in
-  let g =
-    { size; max_turns; turn;
-      entities = mine @ theirs;
-      resources = (my_res, their_res);
-      terrain; res = !res;
-      next_id = 10_000; over = false; winner = -1; reason = "" }
+  let g = 
+    of_snapshot ~size ~max_turns ~turn ~terrain ~amounts
+    ~resources: (my_res, their_res) (mine @ theirs)
   in
   { v_turn = turn; v_max_turns = max_turns;
     my_resources = my_res; enemy_resources = their_res;
     my_units = mine; enemy_units = theirs;
-    v_size = size; v_game = g }
+    v_size = size; world = g }
 
 let json_of_order = function
   | Harvest_with n ->

@@ -176,6 +176,37 @@ let find_building g player bt =
   List.find_opt (fun e -> e.player = player && e.kind = B bt) g.entities
 
 (* ---- map presets -------------------------------------------------- *)
+let size g = g.size (*wide and length*)
+let turn g = g.turn (*turn it is*)
+let max_turns g = g.max_turns (*game ends*)
+let entities g = g.entities (*all entities*)
+let is_over g = g.over (*is the game over*)
+let winner g = g.winner (*0, 1 win lose or -1 for a draw*)
+let reason g = g.reason (*why the game ended*)
+let resource_left g x y = (*left on tile*)
+  match PosMap.find_opt (x, y) g.res with (*find tile*)
+  | Some n -> n (*if found return amount*)
+  | None -> 0
+
+let with_entities g es = { g with entities = es } (* copy the game then swao the new entity list*)
+
+let of_snapshot ~size ~max_turns ~turn ~terrain ~amounts ~resources es =
+  let new_terrain = Array.map Array.copy terrain in  (* copy every row: our own private board *)
+  let numbers = List.init size (fun i -> i) in  (* the list 0, 1, 2, ... up to size - 1 *)
+  let positions =  (* every (x, y) square on the board *)
+    List.concat (List.map (fun y -> List.map (fun x -> (x, y)) numbers) numbers) in
+  let notebook =  (* write down every tile that has something *)
+    List.fold_left
+      (fun book (x, y) ->  (* look at one square at a time *)
+         if amounts.(y).(x) > 0  (* does this square have something? *)
+         then PosMap.add (x, y) amounts.(y).(x) book  (* yes: add it to the notebook *)
+         else book)  (* no: leave the notebook alone *)
+      PosMap.empty positions in  (* start with an empty notebook *)
+  let biggest_id = List.fold_left (fun big e -> max big e.id) 0 es in  (* the biggest id of any entity *)
+  { size; max_turns; turn; entities = es; resources;  (* fill in the game *)
+    terrain = new_terrain; res = notebook;  (* our copied board and notebook *)
+    next_id = biggest_id + 1;  (* the next free id *)
+    over = false; winner = -1; reason = "" }  (* not over yet, no winner *)
 
 (* Mirrors MAP_PRESETS_BY_SIZE. Each listed tile is placed, then mirrored
    through the centre so both players face the same map. *)
@@ -669,7 +700,7 @@ type view = {
   my_units : entity list;
   enemy_units : entity list;
   v_size : int;
-  v_game : game;                         (** the whole world; full information *)
+  world : game;                         (** the whole world; full information *)
 }
 
 let view g player =
@@ -678,7 +709,7 @@ let view g player =
     enemy_resources = resources_of g (1 - player);
     my_units = List.filter (fun e -> e.player = player) g.entities;
     enemy_units = List.filter (fun e -> e.player <> player) g.entities;
-    v_size = g.size; v_game = g }
+    v_size = g.size; world = g }
 
 (** The board as text, from [player]'s side: your pieces upper-case, theirs
     lower-case, [$] a resource tile, [#] a wall. This is exactly the rendering
@@ -807,6 +838,22 @@ let bot_names () = List.map fst bots
 (* ------------------------------------------------------------------ *)
 (* 9. Running a match                                                 *)
 (* ------------------------------------------------------------------ *)
+
+let fork v = v.world  (* the game inside the view: no copy needed *)
+
+let rollout ?(interval = 20) g (p0 : bot) (p1 : bot) ~ticks =
+  let one_tick (g, since) _ =  (* play one tick; since counts ticks since the bots spoke *)
+    if g.over then (g, since)  (* game already over: do nothing *)
+    else
+      let consult = since >= interval in  (* is it time to ask the bots? *)
+      let g = if consult then apply_orders g 0 (p0 (view g 0)) else g in  (* player 0's orders *)
+      let g = if consult then apply_orders g 1 (p1 (view g 1)) else g in  (* player 1's orders *)
+      let g, _ = step g in  (* move the game forward one tick *)
+      (g, if consult then 1 else since + 1)  (* reset the counter, or add 1 *)
+  in
+  let final, _ =  (* run one_tick once for each tick *)
+    List.fold_left one_tick (g, interval) (List.init (max 0 ticks) (fun i -> i)) in
+  final  (* the game after all the ticks *)
 
 type result = {
   winner : int;                          (** 0, 1, or -1 for a draw *)
