@@ -70,8 +70,35 @@ let test_random () =
 (** 4. Legal positions. Over real games, no unit ever stands on a wall and
     no two entities ever share a cell. (There is more than one way the old
     engine breaks this. Fixing the kiting is not enough.) *)
+let legal g =  (* is every entity on a legal square? *)
+  let es = entities g in  (* everything on the board *)
+  let on_wall = List.exists (fun (a : entity) -> cell_at g a.x a.y = Wall) es in  (* anyone on a wall? *)
+  let shared =  (* any two different entities on the same square? *)
+    List.exists
+      (fun (a : entity) ->
+         List.exists (fun (b : entity) -> a.id <> b.id && a.x = b.x && a.y = b.y) es)
+      es in
+  (not on_wall) && not shared  (* legal means neither happened *)
+
 let test_legal () =
-  failwith "todo"
+  let play_checked preset name0 name1 =  (* play one whole game, checking every tick *)
+    let _ =
+      play ~preset
+        ~on_tick:(fun g _ -> check bool "nobody on a wall, nobody sharing a square" true (legal g))
+        (Option.get (bot_named name0)) (Option.get (bot_named name1)) in
+    () in
+  List.iter  (* every map, every pair of built-in bots *)
+    (fun preset ->
+       List.iter
+         (fun name0 -> List.iter (fun name1 -> play_checked preset name0 name1) (bot_names ()))
+         (bot_names ()))
+    [ "default"; "corridors" ];
+  let builder =  (* a worker standing ON the square where it is building a barracks *)
+    { (e 50 (U Worker) 0 8 8) with
+      action = Some (Building_it { btype = Barracks; bx = 8; by = 8; progress = 4 }) } in
+  let start = with_entities blank [ builder; e 51 (B Base) 1 14 14 ] in  (* a small hand-made game *)
+  let later = List.fold_left (fun g _ -> fst (step g)) start (List.init 12 (fun i -> i)) in  (* 12 ticks *)
+  check bool "a new building never lands on an occupied square" true (legal later)
 
 let () =
   run "RTS-2 fixes"
