@@ -59,12 +59,6 @@ let test_fair () =
 (** 3. Honest randomness. One [random_bot] value, played twice, plays the
     same game twice. *)
 let test_random () =
-  failwith "todo"
-
-(** 4. Legal positions. Over real games, no unit ever stands on a wall and
-    no two entities ever share a cell. (There is more than one way the old
-    engine breaks this. Fixing the kiting is not enough.) *)
-let test_legal () =
   let b = random_bot 42 in (*one random bot*)
   let first = play b turtle in (*play game*)
   let second = play b turtle in (* same bot*)
@@ -72,6 +66,12 @@ let test_legal () =
     (first.turns = second. turns && state first.final = state second.final); (*both games match*)
   let v = view blank 0 in (* one view of board*)
   check bool "the same view always gets the same orders" true (b v = b v)
+
+(** 4. Legal positions. Over real games, no unit ever stands on a wall and
+    no two entities ever share a cell. (There is more than one way the old
+    engine breaks this. Fixing the kiting is not enough.) *)
+let test_legal () =
+  failwith "todo"
 
 let () =
   run "RTS-2 fixes"
