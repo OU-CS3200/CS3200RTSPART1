@@ -191,7 +191,7 @@ let resource_left g x y = (*left on tile*)
 let with_entities g es = { g with entities = es } (* copy the game then swao the new entity list*)
 
 let of_snapshot ~size ~max_turns ~turn ~terrain ~amounts ~resources es =
-  let new_terrain = Array.map Array.copy terrain in  (* copy every row: our own private board *)
+  let new_terrain = terrain in  (* copy every row: our own private board *)
   let numbers = List.init size (fun i -> i) in  (* the list 0, 1, 2, ... up to size - 1 *)
   let positions =  (* every (x, y) square on the board *)
     List.concat (List.map (fun y -> List.map (fun x -> (x, y)) numbers) numbers) in

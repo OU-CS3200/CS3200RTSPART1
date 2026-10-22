@@ -138,6 +138,12 @@ bot's results may change: fixing fairness changes who wins some fights.
    line of the `.mli` makes it impossible, and why is that a stronger
    guarantee than a comment saying "do not modify the terrain"?
 
+   File "vandal/vandal.ml", line 15, characters 12-18:
+15 |   let g = v.v_game in
+                 ^^^^^^
+Error: This expression has type view
+       There is no field v_game within type view
+
 2. **(3 pts) What had to change.** Which files outside `engine/` did you have
    to change to make the build pass? Your `student/` code did not change —
    what did the `.mli` promise that made that true?
