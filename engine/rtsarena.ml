@@ -435,8 +435,8 @@ let kite g e pool =
       else e
     | _ -> e
 
-let step_attack g e ax ay evs =
-  let enemies = List.filter (fun en -> en.player <> e.player && en.hp > 0) g.entities in
+let step_attack g0 g e ax ay evs =
+  let enemies = List.filter (fun en -> en.player <> e.player && en.hp > 0) g0.entities in
   (* prefer real soldiers; fall back to whatever is left *)
   let military =
     List.filter (fun en -> (not (is_building en)) && not (is_worker en)) enemies
@@ -469,17 +469,21 @@ let step_build g e bt bx by progress evs =
       (replace g { e with action = Some (Building_it { btype = bt; bx; by; progress }) }, evs)
   else (replace g (move_toward g e (bx, by)), evs)
 
-let step_entity (g, evs) id =
+let dying_and_not_fighting e =
+  e.hp <= 0 && (match e.action with Some (Attack_at _) -> false | _ -> true) (*dead no attack*)
+let step_entity g0 (g, evs) id =
+  
   (* look the entity up again: an earlier entity this tick may have killed it *)
-  match List.find_opt (fun e -> e.id = id && e.hp > 0) g.entities with
+  match List.find_opt (fun e -> e.id = id) g.entities with
   | None -> (g, evs)
+  | Some e when dying_and_not_fighting e -> (g, evs) (*dead no attack = skip*)
   | Some e ->
     if is_building e then step_building g e evs
     else
       match e.action with
       | None -> (g, evs)
       | Some (Harvest remembered) -> step_harvest g e remembered evs
-      | Some (Attack_at (ax, ay)) -> step_attack g e ax ay evs
+      | Some (Attack_at (ax, ay)) -> step_attack g0 g e ax ay evs
       | Some (Move_to (mx, my)) ->
         if e.x = mx && e.y = my then (replace g { e with action = None }, evs)
         else (replace g (move_toward g e (mx, my)), evs)
@@ -507,7 +511,7 @@ let step g =
   else begin
     let g = { g with turn = g.turn + 1 } in
     let ids = List.map (fun e -> e.id) g.entities in
-    let g, evs = List.fold_left step_entity (g, []) ids in
+    let g, evs = List.fold_left (step_entity g) (g, []) ids in (*g in photo*)
     let dead = List.filter (fun e -> e.hp <= 0) g.entities in
     let evs =
       List.fold_left
