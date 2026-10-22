@@ -26,7 +26,21 @@ let state g =
 (** 1. The seal. A game you were handed cannot be changed: not through a
     fork you simulate, and not through the arrays you built it from. *)
 let test_seal () =
-  failwith "todo"
+  let g = make_game () in (*new game*)
+  let before = state g in (* pull state to new game*)
+  let forked = fork (view g 0) in (* copy to play with*)
+  let _ = rollout forked light_rush heavy_rush ~ticks:100 in (* run through the pretend game*)
+  check bool "the original game is unchanged" true 
+    (state g = before); (*real game the same*)
+  let terrain = Array.make_matrix 4 4 Empty in (* a small board of empty tiles*)
+  let amounts = Array.make_matrix 4 4 0 in (* a small board of 0*)
+  let snap = of_snapshot ~size: 4 ~max_turns: 10 ~turn: 0 ~terrain ~amounts ~resources: (0,0) [] in (*build game*)
+  terrain.(1).(1) <- Wall; (*now scribble a wall on our original board *)
+  amounts.(2).(2) <- 5; (*amount for wall*)
+  check bool "a wall scribbled on the terrain does not make game" true
+    (cell_at snap 1 1 = Empty); (* The game must see empty tile*)
+  check int " the amount on terrain does not make game " 0
+    (resource_left snap 2 2) (* the game sees 0*)
 
 (** 2. Fairness. Two units that can kill each other in one blow must BOTH
     die in the same tick, whichever of them the engine looks at first. *)
