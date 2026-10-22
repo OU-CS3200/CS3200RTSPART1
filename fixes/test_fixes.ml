@@ -65,7 +65,13 @@ let test_random () =
     no two entities ever share a cell. (There is more than one way the old
     engine breaks this. Fixing the kiting is not enough.) *)
 let test_legal () =
-  failwith "todo"
+  let b = random_bot 42 in (*one random bot*)
+  let first = play b turtle in (*play game*)
+  let second = play b turtle in (* same bot*)
+  check bool "the same bot value plays the same game " true
+    (first.turns = second. turns && state first.final = state second.final); (*both games match*)
+  let v = view blank 0 in (* one view of board*)
+  check bool "the same view always gets the same orders" true (b v = b v)
 
 let () =
   run "RTS-2 fixes"
