@@ -812,19 +812,23 @@ let balanced : bot = fun v ->
 
 (** Deterministic pseudo-random bot: seeded, so games stay reproducible. *)
 let random_bot seed : bot =
-  let state = ref seed in
-  let next () = state := ((!state * 1103515245) + 12345) land 0x3FFFFFFF; !state in
+ let next s = ((s * 1103515245) + 12345) land 0x3FFFFFFF in  (* the next number made from the last one *)
+let pick s n = (s / 65536) mod n in  (* turn a number into a pick from 0 up to n - 1 *)
   fun v ->
-    let r n = next () mod n in
-    let cmds = [ Harvest_with (1 + r 3) ] in
-    let cmds = if r 10 < 3 then cmds @ [ Build_barracks ] else cmds in
-    let t = match r 4 with 0 -> Worker | 1 -> Light | 2 -> Heavy | _ -> Ranged in
-    let cmds = cmds @ [ Train (t, 1) ] in
-    if r 10 < 4 then
-      match v.enemy_units with
-      | [] -> cmds @ [ Defend ]
-      | l -> let e = List.nth l (r (List.length l)) in cmds @ [ Attack (e.x, e.y) ]
-    else cmds @ [ Defend ]
+  let s1 = next (next (seed + (v.v_turn * 7919))) in  (* start from the seed and the turn *)
+  let s2 = next s1 in  (* each new number comes from the one before *)
+  let s3 = next s2 in
+  let s4 = next s3 in
+  let s5 = next s4 in
+  let cmds = [ Harvest_with (1 + pick s1 3) ] in  (* gather with 1, 2, or 3 workers *)
+  let cmds = if pick s2 10 < 3 then cmds @ [ Build_barracks ] else cmds in  (* sometimes build a barracks *)
+  let t = match pick s3 4 with 0 -> Worker | 1 -> Light | 2 -> Heavy | _ -> Ranged in  (* pick a unit type *)
+  let cmds = cmds @ [ Train (t, 1) ] in  (* train one of them *)
+  if pick s4 10 < 4 then  (* sometimes attack *)
+    match v.enemy_units with
+    | [] -> cmds @ [ Defend ]  (* no enemies: defend *)
+    | l -> let e = List.nth l (pick s5 (List.length l)) in cmds @ [ Attack (e.x, e.y) ]  (* attack a random enemy *)
+  else cmds @ [ Defend ]  (* otherwise defend *)
 
 let bots : (string * bot) list =
   [ "worker-rush", worker_rush;
