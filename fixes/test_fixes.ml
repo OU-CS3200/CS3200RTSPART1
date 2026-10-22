@@ -45,7 +45,16 @@ let test_seal () =
 (** 2. Fairness. Two units that can kill each other in one blow must BOTH
     die in the same tick, whichever of them the engine looks at first. *)
 let test_fair () =
-  failwith "todo"
+  let a = { (e 1 (U Heavy) 0 5 5) with hp = 4; action = Some (Attack_at (6, 5)) } in  (* red heavy, one hit from death *)
+  let b = { (e 2 (U Heavy) 1 6 5) with hp = 4; action = Some (Attack_at (5, 5)) } in  (* blue heavy, one hit from death *)
+  let after list = fst (step (with_entities blank list)) in  (* play one tick with these units *)
+  check int "both die when a is listed first" 0 (List.length (entities (after [ a; b ])));  (* nobody left *)
+  check int "both die when b is listed first" 0 (List.length (entities (after [ b; a ])));  (* nobody left *)
+  let c = { (e 3 (U Heavy) 0 5 5) with hp = 4; action = Some (Attack_at (6, 5)) } in  (* red heavy, one hit from death *)
+  let d = { (e 4 (U Heavy) 1 6 5) with action = Some (Attack_at (5, 5)) } in  (* blue heavy, full health *)
+  check bool "the result does not depend on who is listed first" true
+    (List.sort compare (entities (after [ c; d ]))
+     = List.sort compare (entities (after [ d; c ])))  (* same units, same health *)
 
 (** 3. Honest randomness. One [random_bot] value, played twice, plays the
     same game twice. *)
