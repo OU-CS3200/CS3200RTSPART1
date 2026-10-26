@@ -100,7 +100,29 @@ let pure =
 let conserved =
   QCheck.Test.make ~count ~name:"resources are conserved" Gen.recipe (fun r ->
       let g = Gen.game_of r in
-      failwith "todo")
+      
+      (*Orginial amounts*)
+      let map_before = map_total g in
+      let carried_before = carried g in
+      let stock0_before = Rtsarena.resources_of g 0 in
+      let stock1_before = Rtsarena.resources_of g 1 in
+      let workers_before = worker_ids g in
+      let g', events = step g in
+      let map_after = map_total g' in
+      let map_removed = map_before - map_after in
+      let harvest_total = harvested events in
+      let map_ok = map_removed = harvest_total in
+      let worker_died = 
+        List.exists (fun id -> not (has_id g' id)) workers_before in 
+      let carry_ok = 
+        worker_died || harvest_total = carried g' - carried_before + deposited events 0 + deposited events 1 in
+      let stock0_ok = Rtsarena.resources_of g' 0 = 
+        stock0_before + deposited events 0 in
+      let stock1_ok = Rtsarena.resources_of g' 1 =
+        stock1_before + deposited events 1 in
+          
+      map_ok && carry_ok && stock0_ok && stock1_ok
+  )
 
 (** 4. (4 pts) Legal positions: every entity is on the board, no unit
     stands on a wall, and no two entities share a cell. Check the game the
