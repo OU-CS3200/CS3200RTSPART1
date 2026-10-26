@@ -137,23 +137,35 @@ bot's results may change: fixing fairness changes who wins some fights.
    `vandal/vandal.ml` against your engine. Explain it in your own words: which
    line of the `.mli` makes it impossible, and why is that a stronger
    guarantee than a comment saying "do not modify the terrain"?
-
+   Compiler error:
    File "vandal/vandal.ml", line 15, characters 12-18:
-15 |   let g = v.v_game in
+   15 |   let g = v.v_game in
                  ^^^^^^
-Error: This expression has type view
+   Error: This expression has type view
        There is no field v_game within type view
+       ```
+   File "vandal/vandal.ml", line 22, characters 64-71:
+   Error: Unbound record field terrain
+   ```
+
+   The code fails because view is no longer called v_game. The .mli defines with "world" instead. It also makes the game abstract so the engine can not see its internal fields. This is better than a comment because the compiler prevents the code from accessing those fields. 
 
 2. **(3 pts) What had to change.** Which files outside `engine/` did you have
    to change to make the build pass? Your `student/` code did not change —
    what did the `.mli` promise that made that true?
 
+   bin/main.ml changed g.turn become turn g and bin/rts_bots.ml now builds game with of_snapshots and fills world instand of v_game.The game is hidden and my student code never reached inside a game. It can only view and call functions.
+
 3. **(2 pts) `fork`.** In the reference engine, `fork v` is just `v.world`,
    with no copy. Why is that safe now, when copying a game in the RTS-1 engine
    would not have been enough?
 
+   Copying the game record only copies the pointer, so the copy and the original shared one board, and changing it through either one changed both. Now game is by its self so nothing outside of engine can change one. The engine never changes game, steps gives new game, and of_snapshot copies the arrays given. So handing out the same value is safe as handing out a copy because nobody would tell the difference.
+
 4. **(2 pts) Your fifth property.** Name it, and say what bug it would catch
    that the other four would not.
+
+   Named it:unique_id. It cataches an engine that forgets to give new units or buildings a fresh id. That that no two things end up having the same id. The outher four would miss it because they either don't look at ids or two entities are on different squares means its legal.
 
 ## Collaboration and AI
 
@@ -162,7 +174,7 @@ what, under the heading below.
 
 ## README (collaboration / AI use)
 
-*Who you talked to, and what AI tools you used for what.*
+Didn't talk to nobody and had AI (claude) walk me through things step by step. 
 
 ## Submitting
 
