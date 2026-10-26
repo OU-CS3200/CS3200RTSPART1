@@ -129,17 +129,60 @@ let conserved =
     recipe gives you and the one after it. *)
 let legal =
   QCheck.Test.make ~count ~name:"every position is legal" Gen.recipe (fun r ->
-      let g = Gen.game_of r in
-      failwith "todo")
+      let g = Gen.game_of r in (*create game*)
+      let g', _ = Rtsarena.step g in (* Run one turn. *)
+      let es = Rtsarena.entities g' in (* Get all entities. *)
+
+      (* Check that every entity is inside the board. *)
+      let in_bounds =
+        List.for_all
+          (fun (e : Rtsarena.entity) ->
+            e.x >= 0 && e.x < Rtsarena.size g'
+            && e.y >= 0 && e.y < Rtsarena.size g')
+          es in
+
+      (* Check that no entity is standing on a wall. *)
+      let not_on_wall =
+        List.for_all
+          (fun (e : Rtsarena.entity) ->
+            Rtsarena.cell_at g' e.x e.y <> Rtsarena.Wall)
+          es in
+
+      (* Check that no two entities share the same position. *)
+      let no_overlap =
+        List.for_all
+          (fun (e : Rtsarena.entity) ->
+            List.for_all
+              (fun (other : Rtsarena.entity) ->
+                e.id = other.id
+                || e.x <> other.x
+                || e.y <> other.y)
+              es)
+          es in
+
+      (* All three checks must pass. *)
+      in_bounds && not_on_wall && no_overlap)
 
 (** 5. (4 pts) One of your own. Name it, say in RTS2.md what it catches that
     the four above do not, and make it pass. *)
-let mine =
+let unique_ids =
   QCheck.Test.make ~count
     ~name:
-      "TODO: name your property"
+      "entity IDs stay unique to them"
     Gen.recipe (fun r ->
-      let g = Gen.game_of r in
-      failwith "todo")
+      let g = Gen.game_of r in (*create game*)
+      let g', _ = Rtsarena.step g in (*Run one game*)
+      let es = Rtsarena.entities g' in (*get entities*)
+      let ids = List.map (fun (e : Rtsarena.entity) -> e.id) es in (*list of ids*)
+      let rec no_duplicates ids =
+        match ids with
+        | [] -> true (*No ids left for checking*)
+        | id :: rest -> not (List.mem id rest) && no_duplicates rest 
+      in
 
-let all = [ deterministic; pure; conserved; legal; mine ]
+      no_duplicates ids (*pass if all unique*)
+
+      )
+
+
+let all = [ deterministic; pure; conserved; legal; unique_ids ]
