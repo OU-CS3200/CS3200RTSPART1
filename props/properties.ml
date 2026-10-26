@@ -76,7 +76,15 @@ let pure =
   QCheck.Test.make ~count ~name:"step and rollout leave their argument alone" Gen.recipe
     (fun r ->
        let g = Gen.game_of r in
-       failwith "todo")
+       let before = Gen.snapshot g in (*capture game*)
+       let total_before = map_total g in (*what's on map*)
+       let _ = step g in
+       let _ = rollout (fork (view g 0)) light_rush heavy_rush ~ticks:30 in (*simulate*)
+       let _ = rollout (fork (view g 1)) (random_bot 7) turtle ~ticks:30 in (*another simulation*)
+       let fresh = make_game ~preset:r.Gen.preset () in (*same map not played on *)
+       let terrain_same = List.for_all (fun (x,y) -> cell_at g x y = cell_at fresh x y) (all_cells g) in
+       Gen.snapshot g = before && map_total g = total_before && terrain_same)
+
 
 (** 3. (4 pts) Conservation, over one tick. Resources are never created or
     destroyed, only moved:
