@@ -20,12 +20,55 @@ open Rtsarena
 
 let count = 200
 
+let numbers g = List.init (size g) (fun i -> i)  (* 0, 1, 2, ... up to size - 1 *)
+
+let all_cells g =  (* every (x, y) square on the board *)
+  List.concat (List.map (fun y -> List.map (fun x -> (x, y)) (numbers g)) (numbers g))
+
+let map_total g =  (* all the resources still lying on the map *)
+  List.fold_left (fun total (x, y) -> total + resource_left g x y) 0 (all_cells g)
+
+let harvested evs =  (* how many Harvested events *)
+  List.fold_left (fun n ev -> match ev with Harvested _ -> n + 1 | _ -> n) 0 evs
+
+let deposited evs p =  (* how much player p deposited *)
+  List.fold_left
+    (fun total ev ->
+       match ev with
+       | Deposited { player; amount } -> if player = p then total + amount else total
+       | _ -> total)
+    0 evs
+
+let carried g =  (* how much all the units are carrying *)
+  List.fold_left (fun total (e : entity) -> total + e.carrying) 0 (entities g)
+
+let worker_ids g =  (* the ids of all workers *)
+  List.map (fun (e : entity) -> e.id) (List.filter is_worker (entities g))
+
+let has_id g id = List.exists (fun (e : entity) -> e.id = id) (entities g)  (* is this id in the game? *)
+
+let find_id g id = List.find_opt (fun (e : entity) -> e.id = id) (entities g)  (* look an entity up by id *)
+
+let legal_game g =  (* everyone on the board, nobody on a wall, nobody sharing a square *)
+  let es = entities g in
+  let on_board = List.for_all (fun (e : entity) -> in_bounds g e.x e.y) es in (*is it true for all*)
+  let off_walls = List.for_all (fun (e : entity) -> in_bounds g e.x e.y && cell_at g e.x e.y <> Wall) es in
+  let alone =
+    List.for_all
+      (fun (a : entity) ->
+         List.for_all (fun (b : entity) -> a.id = b.id || a.x <> b.x || a.y <> b.y) es)
+      es in
+  on_board && off_walls && alone
+
 (** 1. (4 pts) Determinism: stepping the same game twice gives the same
     position and the same events. *)
 let deterministic =
   QCheck.Test.make ~count ~name:"step is deterministic" Gen.recipe (fun r ->
       let g = Gen.game_of r in
-      failwith "todo")
+      let g1, events1 = step g in  (*once*)
+      let g2, events2 = step g in (*same game*)
+      Gen.snapshot g1 = Gen.snapshot g2 && events1 = events2 (*must be identical if not bug*)
+  )
 
 (** 2. (4 pts) Purity: stepping a game, or simulating a fork of it, does not
     change it. Take a snapshot before and after. *)
