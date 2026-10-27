@@ -15,6 +15,17 @@ a fork is just the game — no copy at all.
 
 ## Getting RTS-3 into your repository
 
+Use the `template` remote you added for RTS-2, over SSH. Check with
+`git remote -v`: if `template` or `origin` starts with `https://`, switch it
+first (RTS2.md shows how; the organization's two-factor requirement means
+HTTPS cannot push). If you never added `template`:
+
+```
+git remote add template git@github.com:OU-CS3200/ou-cs3200-fall-2026-rts.git
+```
+
+Then:
+
 ```
 git fetch template
 git merge template/rts3
