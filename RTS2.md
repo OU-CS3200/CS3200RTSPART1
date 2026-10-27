@@ -14,13 +14,32 @@ sides**. By the end of RTS-2 it will not compile.
 
 ## Getting RTS-2 into your repository
 
+**Use SSH, not HTTPS, for every GitHub remote.** OU-CS3200 requires
+two-factor authentication, and GitHub does not take a password for git over
+HTTPS, so `git push` needs an SSH key. Add one to your GitHub account
+([GitHub's guide](https://docs.github.com/en/authentication/connecting-to-github-with-ssh))
+and check it with `ssh -T git@github.com`. Then run `git remote -v`: `origin`
+must start with `git@github.com:` and name *your* repository, not
+`ou-cs3200-fall-2026-rts`. If it starts with `https://`, switch it:
+
+```
+git remote set-url origin git@github.com:OU-CS3200/YOUR-REPO.git
+```
+
 Your RTS-1 work stays where it is. RTS-2 arrives as a branch of the template;
 merge it in once:
 
 ```
-git remote add template https://github.com/OU-CS3200/ou-cs3200-fall-2026-rts.git
+git remote add template git@github.com:OU-CS3200/ou-cs3200-fall-2026-rts.git
 git fetch template
 git merge template/rts2
+```
+
+If you already added `template` with an `https://` address, point it at SSH
+instead of adding it again:
+
+```
+git remote set-url template git@github.com:OU-CS3200/ou-cs3200-fall-2026-rts.git
 ```
 
 The merge only adds or replaces files you were told not to edit (`engine/`,
