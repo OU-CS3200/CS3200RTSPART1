@@ -45,6 +45,12 @@ git commit
 Your `student/`, `props/` and `fixes/` code is untouched. Keep your RTS-2
 engine on your `rts2` tag if you want it — `git show rts2:engine/rtsarena.ml`.
 
+**If you hit conflicts you cannot resolve easily, do not fight them.** Run
+`git merge --abort`, make a fresh clone of *your* repository into a new folder
+(`git clone git@github.com:OU-CS3200/YOUR-REPO.git rts3-fresh`), and repeat the
+steps above there. Everything you committed and pushed is in the fresh clone;
+anything you did not push is not, so push first.
+
 ## What to do
 
 All of your code goes in `search/`. Each file says what it wants at the top.
@@ -116,7 +122,10 @@ the reference engine, through the JSON protocol.
 - **20 pts** for an entry that finishes the whole round robin with no faults.
   A fault is a crash, output we cannot read, or a reply slower than 1 second;
   three faults in one game forfeit it.
-- **Bonus:** +5 / +3 / +2 for first, second and third place.
+- **Bonus:** +100 / +50 / +30 for first, second and third place.
+- **Unique contributions: +50 to +200.** Anything else you did that no one
+  else did. Describe it, with the evidence, under *Unique contributions* at
+  the end of this file.
 
 Try it yourself before you submit:
 
@@ -161,6 +170,10 @@ League: out
    it beats in-process — with every unit, stockpile and cell exactly right.
    Explain how that can be. What does it say about `fork`, and about what a
    `view` shows you?
+
+## Unique contributions
+
+*Optional. What you did, why it is your own, and the evidence.*
 
 ## Collaboration and AI
 
