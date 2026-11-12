@@ -28,6 +28,19 @@ open Rtsarena
 (** Which player the view belongs to. Given. *)
 let me_of (v : view) : int = match v.my_units with e :: _ -> e.player | [] -> 0
 
+(** YOUR CODE GOES HERE: Part A2 is the body of [make].
+
+    [make] builds a search bot from its settings and returns it:
+    - [ticks]: how far each rollout runs;
+    - [model]: the bot you assume the opponent plays;
+    - [cache]: [true] uses [Memo.rollout_chunks], [false] the engine's [rollout].
+    Use all three; do not hard-code them. The tests, [bin/bench.ml] and the
+    runner call [make] with different settings, and Part A is graded on
+    [make ()], the defaults.
+
+    Anything before [fun (v : view) ->] runs once per bot (create the cache
+    there); the function itself runs once per consultation (the search).
+    The stub ignores its arguments and plays your RTS-1 bot. *)
 let make ?(ticks : int = 100) ?(model : bot = Bot.my_bot) ?(cache : bool = true) () : bot =
   fun (v : view) -> Bot.my_bot v
 
