@@ -101,17 +101,28 @@ the cache, and that the key tells apart what it must.
 dune exec bin/bench.exe
 ```
 
-**Explain (5):** then *break* your key on purpose — make a copy that leaves out
-the turn — and answer:
+| ticks | cache | ms / consultation | hit rate | wins |
+| ---: | :--- | ---: | ---: | ---: |
+|  20 | off   |     10.4 |     — | 2 / 8 |
+|  20 | on    |      8.4 |   28.5% | 2 / 8 |
+|  50 | off   |     11.9 |     — | 7 / 8 |
+|  50 | on    |     11.2 |   10.2% | 7 / 8 |
+| 100 | off   |     23.3 |     — | 7 / 8 |
+| 100 | on    |     20.7 |   18.3% | 7 / 8 |
+
+**Explain (5):** then *break* your key on purpose — make a copy that leaves out the turn — and answer:
 
 1. What happened to the hit rate?
-2. Were the games the cache handed back wrong? *How* were they wrong? (Compare
-   a cached chunk with a freshly computed one: the units, the stockpiles, the
-   turn.) Why does it matter for a rollout, even when the units come out right?
-3. Your bot keeps a `Hashtbl` that changes every time it is called — exactly the
-   kind of hidden state RTS-1 Part D and RTS-2 fix 3 took away from
-   `random_bot`. Why is your hidden state acceptable, and `random_bot`'s was
-   not? What test in `test/test_rts3.ml` checks your answer?
+
+   The hite rate barely changed. 28.5% stayed the same, 10.2% changed to 10.4%, and 18.3% to 18.8% and the wins stayed the same. The broken key was fine and had no crashing happening.
+
+2. Were the games the cache handed back wrong? *How* were they wrong? (Compare a cached chunk with a freshly computed one: the units, the stockpiles, the turn.) Why does it matter for a rollout, even when the units come out right?
+
+   In a test two games with the same units but a different turn (0 and 50) and 7 extra gold in one of them. They got the same broken key. One chunk had ended up at turn 20 and the other was at 70, and my gold was 5 versus the other 12. So a cache hit would hand back the wrong turn and the wrong stockpile even if the units come out right. For a rollout that matters becasue it stops turn count and the bots read from the turn and gold numbers, thus a wrong turn or wrong gold changes the bots next moves.
+
+3. Your bot keeps a `Hashtbl` that changes every time it is called — exactly the kind of hidden state RTS-1 Part D and RTS-2 fix 3 took away from `random_bot`. Why is your hidden state acceptable, and `random_bot`'s was not? What test in `test/test_rts3.ml` checks your answer?
+
+   The Hashtbl only stored what the engine would give. The key would always give the same game, so the cache never changes what the bot decided it could only make it faster. The random_bot hidden state changed its answers so making the same view give different orders each call, so a game could not be replayed. Memo 1 test, the cache never changes a result, checks this and, the search 1 the cache never changes a decision. 
 
 ### Part C — Tournament (20 pts + bonus)
 
@@ -155,21 +166,20 @@ League: out
 
 ## Part D — answer here (10 pts)
 
-1. **(4 pts) A loss.** Find a game your search bot lost to a bot it should
-   beat (another map, a different opponent model, a shorter rollout — look
-   for one). Was the opponent model wrong, the eval wrong, or the horizon too
-   short? Show the evidence: what the bot predicted, and what happened.
+1. **(4 pts) A loss.** Find a game your search bot lost to a bot it should beat (another map, a different opponent model, a shorter rollout — look for one). Was the opponent model wrong, the eval wrong, or the horizon too short? Show the evidence: what the bot predicted, and what happened.
 
-2. **(3 pts) The horizon.** Run `bench` and look at the `wins` column for
-   20-tick and 100-tick rollouts. Why would a *shorter* lookahead lose games
-   that a longer one wins, when the shorter one has more consultations'
-   worth of time to spare?
+   My search lost as P0 on default and rich to my-bot, and won the other games. I logged each consultation predicting score and chosen plan versus what the real eval was 100 ticks later. The prediction where right. Predicted -11.8 at t=40 and the real eval at t=140 was -11.8; predicted 24.3 at t=100 and real 24.3 at t=200; predicted -26.7 at t=160 and real -26.7 at t=260; predicted -65.0 at t=200 and real -65.0 at t=300. So my-bot and the eval were not the problem. The bot chose my-bot at 16 and 17 consultations, so no other plan in my menu scored higher. I think the limit is my menu and the 100-tick horizon, once a saw the deficit (t=160, -26.7) none of the six plans would be able to fix it.
 
-3. **(3 pts) The protocol.** Before the tournament sent the entity order and
-   the next id, a search bot rebuilt from the wire lost to the plain RTS-1 bot
-   it beats in-process — with every unit, stockpile and cell exactly right.
-   Explain how that can be. What does it say about `fork`, and about what a
-   `view` shows you?
+2. **(3 pts) The horizon.** Run `bench` and look at the `wins` column for 20-tick and 100-tick rollouts. Why would a *shorter* lookahead lose games that a longer one wins, when the shorter one has more consultations' worth of time to spare?
+
+   At 20 ticks the bot won 2/8, and at 50 or 100 ticks 7/8.
+   A barracks takes 10 ticks and units take 4 to 6, so I think a 20-tick rollout mostly sees plans spending money, not the army they build. A short lookahead picks plans that look good now and lose later. More consultations don't help, because each one is just as short-sighted.
+
+
+3. **(3 pts) The protocol.** Before the tournament sent the entity order and the next id, a search bot rebuilt from the wire lost to the plain RTS-1 bot it beats in-process — with every unit, stockpile and cell exactly right. Explain how that can be. What does it say about `fork`, and about what a `view` shows you?
+
+   The engine keeps hidden things a view does not show: the
+   order of the entities and the next id. They decide who acts first and which unit wins a tie. A game rebuilt from the wire had every unit, stockpile and cell right, but its future was different, so its rollouts predicted wrongly. A fork of the real game carries all of that hidden state. A view only shows part of the game, so a game rebuilt from a view is a guess.
 
 ## Unique contributions
 
@@ -182,7 +192,7 @@ heading below.
 
 ## README (collaboration / AI use)
 
-*Who you talked to, and what AI tools you used for what.*
+Did not talk to anyone and used claude to organize and explain what needs to be done and show code and explain what could help. 
 
 ## Submitting
 
