@@ -85,3 +85,28 @@ let candidates : (string * bot) list =
     ("ranged-line", ranged_line);
     ("boom", boom);
     ("counter", counter) ]
+
+
+let all_in_heavy : bot =
+  plan (eco 2)
+    (first_of [ barracks_first; train Heavy ])
+    (first_of [ push_at 2; always [ Defend ] ])
+
+let mixed_arms : bot =
+  plan (eco 2)
+    (first_of
+       [ barracks_first;
+         when_ (fun (v : view) -> v.v_turn mod 40 < 20) [ Train (Light, 1) ];
+         train Ranged ])
+    (first_of [ push_at 4; always [ Defend ] ])
+
+let ranged_turtle : bot =
+  plan (eco 3)
+    (first_of [ barracks_first; train Ranged ])
+    (first_of [ when_ (Bot.under_attack 6) [ Defend ]; push_at 7; always [ Defend ] ])
+
+let pro_candidates : (string * bot) list =
+  candidates
+  @ [ ("all-in-heavy", all_in_heavy);
+      ("mixed-arms", mixed_arms);
+      ("ranged-turtle", ranged_turtle) ]
