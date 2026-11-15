@@ -190,6 +190,10 @@ I built make_pro as my tournament entry. It does:
    - A 0,4s time guard and fallback
    - Plan stickiness and faster wins scoring higher
    - Plan sequemces: it also tests plan A then plan B after 40 ticks and plays A now. 
+   - Speed: basic make () about 21 ms per move. The tournament entry
+  (make_pro with 5 opponent models and plan sequences) averaged 193 ms
+  and at worst 322 ms per move over 283 moves (limit 1000 ms), kept
+  down by a 0.3 s time guard.
 Evidence
  - basic 9/24, pro (100 ticks) 17/24. pro beat basic 6 of 8.
  - Looking further ahead was worse: 150 ticks 11/24, 200 ticks 11/24.

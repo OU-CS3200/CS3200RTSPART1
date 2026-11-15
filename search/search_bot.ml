@@ -76,11 +76,12 @@ let guess_model (v : view) : bot =
   else if h >= r then Policies.heavy_turtle
   else Policies.ranged_line
 
-let switch (a : bot) (b : bot) (t : int) : bot =
+let then_plan (a : bot) (b : bot) (t : int) : bot =
   fun (v : view) -> if v.v_turn < t then a v else b v
 
 let make_pro ?(ticks : int = 100) ?(budget : float = 0.4) ?(margin : float = 1.0)
-    ?(seq : bool = false) ?(multi : bool = false) () : bot =
+    ?(seq : bool = false) ?(multi : bool = false)
+    ?(switch : int = 40) ?(wide : bool = false) () : bot =
   let tbl : (string, game) Hashtbl.t = Hashtbl.create 8192 in
   let last : string ref = ref "my-bot" in
   let basic = make ~ticks () in
@@ -91,7 +92,11 @@ let make_pro ?(ticks : int = 100) ?(budget : float = 0.4) ?(margin : float = 1.0
       let me = me_of v in
       let g = fork v in
       let guess = guess_model v in
-      let models = if guess == Bot.my_bot then [ Bot.my_bot ] else [ guess; Bot.my_bot ] in
+      let models =
+        if wide then
+          [ guess; Bot.my_bot; Policies.light_flood; Policies.heavy_turtle; Policies.ranged_line ]
+        else if guess == Bot.my_bot then [ Bot.my_bot ]
+        else [ guess; Bot.my_bot ] in
       let value (f : game) : float =
         if is_over f then
           (if winner f = me then 1e6 -. float_of_int (turn f) else -1e6)
@@ -107,11 +112,11 @@ let make_pro ?(ticks : int = 100) ?(budget : float = 0.4) ?(margin : float = 1.0
       let cands : (string * bot) list =
         if not seq then Policies.pro_candidates
         else begin
-          let t = turn g + 40 in
+          let t = turn g + switch in
           let seconds = [ Bot.my_bot; Policies.heavy_turtle; Policies.light_flood ] in
           List.concat_map
             (fun ((na, a) : string * bot) ->
-              (na, a) :: List.map (fun (b : bot) -> (na, switch a b t)) seconds)
+              (na, a) :: List.map (fun (b : bot) -> (na, then_plan a b t)) seconds)
             Policies.pro_candidates
         end in
       let best : (float * string * bot) option ref = ref None in
@@ -130,4 +135,5 @@ let make_pro ?(ticks : int = 100) ?(budget : float = 0.4) ?(margin : float = 1.0
        | None -> Bot.my_bot v)
     with _ -> basic v
 
-let bot : bot = make_pro ~seq:true ()
+let bot : bot = make_pro ~seq:true ~wide:true ~budget:0.3 ()
+
