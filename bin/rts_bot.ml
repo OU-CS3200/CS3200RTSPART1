@@ -11,28 +11,47 @@
         --bot-cmd "./rts_bot" --opponent lightRush
     v}
 
-    The strategy is [Bot.my_bot] from student/bot.ml — the same function
+    The strategy is [Search.Search_bot.bot] from search/search_bot.ml — the same function
     the OCaml engine runs offline, so whatever you beat locally is what the
     arena will run.  *)
 
 open Rtsarena
 
-(* Your entry: the bot from student/bot.ml. *)
-let strategy : bot = Bot.my_bot
+(* Your entry: the search bot from search/search_bot.ml. *)
+let strategy : bot = Search.Search_bot.bot
 
 (* ------------------------------------------------------------------ *)
 (* Protocol plumbing                                                  *)
 (* ------------------------------------------------------------------ *)
 
-let kind_of_string s is_bldg =
+let kind_of_string (s : string) (is_bldg : bool) : kind option =
   if is_bldg then
     match s with
     | "barracks" -> Some (B Barracks)
     | "base" -> Some (B Base)
     | _ -> None
-  else Option.map (fun u -> U u) (unit_type_of_string s)
+  else Option.map (fun (u : unit_type) -> U u) (unit_type_of_string s)
 
-let entity_of_json me j =
+(* The course tournament also sends what each unit is doing and what each
+   building is making; the JavaScript arena does not, and then both are
+   None, as before. *)
+let action_of_json (j : Json.t) : action option =
+  let int (k : string) : int = Json.int_field k j in
+  match Json.str_field "kind" j with
+  | "harvest" ->
+    Some (Harvest (if Json.member "x" j = Json.Null then None else Some (int "x", int "y")))
+  | "attack" -> Some (Attack_at (int "x", int "y"))
+  | "move" -> Some (Move_to (int "x", int "y"))
+  | "build" ->
+    let btype = if Json.str_field "buildingType" j = "base" then Base else Barracks in
+    Some (Building_it { btype; bx = int "x"; by = int "y"; progress = int "progress" })
+  | _ -> None
+
+let producing_of_json (j : Json.t) : (unit_type * int) option =
+  Option.map (fun (u : unit_type) -> (u, Json.int_field "ticks" j))
+    (unit_type_of_string (Json.str_field "unitType" j))
+
+let entity_of_json (me : int) (j : Json.t) : entity option =
   let t = Json.str_field "type" j in
   let is_bldg =
     Json.to_bool (Json.member "isBuilding" j) || t = "base" || t = "barracks"
@@ -49,57 +68,56 @@ let entity_of_json me j =
       { e with
         hp = Json.int_field ~default:e.hp "hp" j;
         max_hp = Json.int_field ~default:e.max_hp "maxHp" j;
-        carrying = Json.int_field "carrying" j }
+        carrying = Json.int_field "carrying" j;
+        action = action_of_json (Json.member "action" j);
+        producing = producing_of_json (Json.member "producing" j) }
 
 (* Rebuild a [game] from the wire state so the offline strategies work
    unchanged on live data. *)
-let view_of_json j =
+let view_of_json (j : Json.t) : view =
   let turn = Json.int_field "turn" j in
   let max_turns = Json.int_field ~default:500 "maxTurns" j in
-  let terrain_rows = Json.to_list (Json.member "terrain" j) in
-  let amount_rows = Json.to_list (Json.member "resourceAmounts" j) in
-  let size = match terrain_rows with [] -> 16 | r :: _ -> List.length (Json.to_list r) in
+  let rows (k : string) : int array array =
+    List.map (fun (r : Json.t) -> Array.of_list (List.map Json.to_int (Json.to_list r)))
+                 (Json.to_list (Json.member k j)) |> Array.of_list in
+  let terrain_codes = rows "terrain" and amounts = rows "resourceAmounts" in
+  let size = if Array.length terrain_codes = 0 then 16 else Array.length terrain_codes.(0) in
   let size = if size = 0 then 16 else size in
-  let terrain = Array.make_matrix size size Empty in
-  let amounts = Array.make_matrix size size 0 in
-  List.iteri
-    (fun y row ->
-       List.iteri
-         (fun x cell ->
-            if y < size && x < size then
-              match Json.to_int cell with
-              | 1 -> terrain.(y).(x) <- Resource
-              | 2 -> terrain.(y).(x) <- Wall
-              | _ -> ())
-         (Json.to_list row))
-    terrain_rows;
-  List.iteri
-    (fun y row ->
-       List.iteri
-         (fun x cell ->
-            let n = Json.to_int cell in
-            if n > 0 && y < size && x < size then amounts.(y).(x) <- n)
-         (Json.to_list row))
-    amount_rows;
+  let terrain =
+    Array.map (Array.map (function 1 -> Resource | 2 -> Wall | _ -> Empty)) terrain_codes in
   let mine = List.filter_map (entity_of_json 0) (Json.to_list (Json.member "myUnits" j)) in
   let theirs =
     List.filter_map (entity_of_json 1) (Json.to_list (Json.member "enemyUnits" j))
   in
   (* force sides, in case the runner omits playerId *)
-  let mine = List.map (fun e -> { e with player = 0 }) mine in
-  let theirs = List.map (fun e -> { e with player = 1 }) theirs in
-  let my_res = Json.int_field "myResources" j in
-  let their_res = Json.int_field "enemyResources" j in
-  let g = 
-    of_snapshot ~size ~max_turns ~turn ~terrain ~amounts
-    ~resources: (my_res, their_res) (mine @ theirs)
+  let mine = List.map (fun (e : entity) -> { e with player = 0 }) mine in
+  let theirs = List.map (fun (e : entity) -> { e with player = 1 }) theirs in
+  let resources = (Json.int_field "myResources" j, Json.int_field "enemyResources" j) in
+  (* The course tournament says what order the engine keeps entities in,
+     and what id the next unit gets; both change what happens next, so a
+     rebuilt game needs them to predict the real one. The JavaScript arena
+     sends neither. *)
+  let seq_of = Hashtbl.create 64 in
+  List.iter
+    (fun (j : Json.t) -> match Json.member "seq" j with
+       | Json.Null -> ()
+       | s -> Hashtbl.replace seq_of (Json.int_field "id" j) (Json.to_int s))
+    (Json.to_list (Json.member "myUnits" j) @ Json.to_list (Json.member "enemyUnits" j));
+  let ents = mine @ theirs in
+  let ents =
+    if Hashtbl.length seq_of = 0 then ents
+    else
+      List.stable_sort
+        (fun (a : entity) (b : entity) ->
+           compare (Hashtbl.find_opt seq_of a.id |> Option.value ~default:max_int)
+             (Hashtbl.find_opt seq_of b.id |> Option.value ~default:max_int))
+        ents
   in
-  { v_turn = turn; v_max_turns = max_turns;
-    my_resources = my_res; enemy_resources = their_res;
-    my_units = mine; enemy_units = theirs;
-    v_size = size; world = g }
+  let next_id = match Json.member "nextId" j with Json.Null -> None | n -> Some (Json.to_int n) in
+  let g = of_snapshot ?next_id ~size ~max_turns ~turn ~terrain ~amounts ~resources ents in
+  view g 0
 
-let json_of_order = function
+let json_of_order : order -> Json.t = function
   | Harvest_with n ->
     Json.Obj [ ("type", Json.Str "harvest"); ("count", Json.Num (float_of_int n)) ]
   | Build_barracks ->
@@ -116,12 +134,13 @@ let json_of_order = function
   | Defend -> Json.Obj [ ("type", Json.Str "defend") ]
   | Retreat -> Json.Obj [ ("type", Json.Str "retreat") ]
 
-let json_of_orders orders = Json.List (List.map json_of_order orders)
+let json_of_orders (orders : order list) : Json.t =
+  Json.List (List.map json_of_order orders)
 
 (* ------------------------------------------------------------------ *)
 
 let () =
-  let rec loop () =
+  let rec loop () : unit =
     match input_line stdin with
     | exception End_of_file -> ()
     | line ->

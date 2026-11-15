@@ -12,29 +12,31 @@
 
 open Rtsarena
 
-(* Your bot joins the built-ins. [random] is rebuilt for every match so that
+(* Your bots join the built-ins: [my-bot] from RTS-1, [my-search] from
+   RTS-3 (a fresh one per match, so its cache starts empty). [random] is rebuilt for every match so that
    every match starts from the same seed. *)
-let bot_named name =
+let bot_named (name : string) : bot option =
   match name with
   | "my-bot" -> Some Bot.my_bot
+  | "my-search" -> Some (Search.Search_bot.make ())
   | "random" -> Some (random_bot 42)
   | _ -> Rtsarena.bot_named name
 
-let bot_names () = "my-bot" :: Rtsarena.bot_names ()
+let bot_names () : string list = "my-search" :: "my-bot" :: Rtsarena.bot_names ()
 
-let arg_value name default argv =
-  let rec go = function
+let arg_value (name : string) (default : string) (argv : string list) : string =
+  let rec go : string list -> string = function
     | a :: v :: _ when a = "--" ^ name -> v
     | _ :: rest -> go rest
     | [] -> default
   in
   go argv
 
-let has_flag name argv = List.mem ("--" ^ name) argv
+let has_flag (name : string) (argv : string list) : bool = List.mem ("--" ^ name) argv
 
-let side_name = function 0 -> "P0" | 1 -> "P1" | _ -> "draw"
+let side_name : int -> string = function 0 -> "P0" | 1 -> "P1" | _ -> "draw"
 
-let usage () =
+let usage () : unit =
   print_string
     "RTSArena (OCaml)\n\n\
      Usage:\n\
@@ -50,11 +52,12 @@ let usage () =
     \  --quiet         print only the result line\n\n";
   print_endline ("Bots: " ^ String.concat ", " (bot_names ()))
 
-let common argv =
-  let i s d = int_of_string_opt (arg_value s (string_of_int d) argv) |> Option.value ~default:d in
+let common (argv : string list) : int * int * string * int =
+  let i (s : string) (d : int) : int =
+    int_of_string_opt (arg_value s (string_of_int d) argv) |> Option.value ~default:d in
   (i "size" 16, i "turns" 500, arg_value "preset" "default" argv, i "interval" 20)
 
-let cmd_play argv =
+let cmd_play (argv : string list) : unit =
   match argv with
   | a :: b :: rest ->
     (match bot_named a, bot_named b with
@@ -63,7 +66,7 @@ let cmd_play argv =
      | Some pa, Some pb ->
        let size, turns, preset, interval = common rest in
        let show = has_flag "show" rest and quiet = has_flag "quiet" rest in
-       let on_tick g _ =
+       let on_tick (g : game) (_ : event list) : unit =
          if show && turn g mod 50 = 0 then begin
            Printf.printf "\n-- turn %d --  resources %d / %d\n" (turn g)
              (resources_of g 0) (resources_of g 1);
@@ -79,19 +82,20 @@ let cmd_play argv =
          (side_name r.winner) r.turns r.final_reason win)
   | _ -> usage (); exit 1
 
-let cmd_tournament argv =
+let cmd_tournament (argv : string list) : unit =
   let size, turns, preset, interval = common argv in
   let names = bot_names () in
   let n = List.length names in
   let score = Hashtbl.create n in
-  List.iter (fun b -> Hashtbl.replace score b 0) names;
-  let add b v = Hashtbl.replace score b (Hashtbl.find score b + v) in
+  List.iter (fun (b : string) -> Hashtbl.replace score b 0) names;
+  let add (b : string) (v : int) : unit =
+    Hashtbl.replace score b (Hashtbl.find score b + v) in
   Printf.printf "round robin — %d bots, both sides, %dx%d %s, %d turns\n\n"
     n size size preset turns;
   List.iter
-    (fun a ->
+    (fun (a : string) ->
        List.iter
-         (fun b ->
+         (fun (b : string) ->
             if a <> b then begin
               let pa = Option.get (bot_named a) and pb = Option.get (bot_named b) in
               let r = play ~size ~max_turns:turns ~preset ~interval pa pb in
@@ -106,17 +110,17 @@ let cmd_tournament argv =
          names)
     names;
   let table =
-    List.sort (fun (_, x) (_, y) -> compare y x)
-      (List.map (fun b -> (b, Hashtbl.find score b)) names)
+    List.sort (fun ((_, x) : string * int) ((_, y) : string * int) -> compare y x)
+      (List.map (fun (b : string) -> (b, Hashtbl.find score b)) names)
   in
   print_endline "\nstandings (3 for a win, 1 for a draw)";
-  List.iteri (fun i (b, p) -> Printf.printf "  %d. %-14s %3d\n" (i + 1) b p) table
+  List.iteri (fun (i : int) ((b, p) : string * int) -> Printf.printf "  %d. %-14s %3d\n" (i + 1) b p) table
 
 let () =
   match Array.to_list Sys.argv with
   | _ :: "list" :: _ ->
     print_endline "built-in bots:";
-    List.iter (fun n -> Printf.printf "  %s\n" n) (bot_names ())
+    List.iter (fun (n : string) -> Printf.printf "  %s\n" n) (bot_names ())
   | _ :: "play" :: rest -> cmd_play rest
   | _ :: "tournament" :: rest -> cmd_tournament rest
   | _ -> usage ()

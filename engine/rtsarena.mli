@@ -85,15 +85,25 @@ val make_game : ?size:int -> ?max_turns:int -> ?preset:string -> unit -> game
 
 (** Rebuild a game from what the JSON protocol sends ([bin/rts_bot.ml]).
     [terrain] and [amounts] are rows, [terrain.(y).(x)]; the arrays are
-    copied, so changing them afterwards does not change the game. *)
+    copied, so changing them afterwards does not change the game.
+
+    The entities are resolved in the order given, and [next_id] (default:
+    above every id given, and at least 10000) numbers the next unit made.
+    Both change what happens next, so a copy that is to predict the real
+    game must get both right — RTS-3 found out the hard way. *)
 val of_snapshot :
-  size:int -> max_turns:int -> turn:int ->
+  ?next_id:int -> size:int -> max_turns:int -> turn:int ->
   terrain:cell array array -> amounts:int array array ->
   resources:int * int -> entity list -> game
 
 (** Reading a game. *)
 
 val size : game -> int
+
+(** The id the next unit made will get. RTS-3: the tournament sends it, so a
+    bot rebuilding the game from the wire numbers new units as the real
+    game will. *)
+val next_id : game -> int
 val turn : game -> int
 val max_turns : game -> int
 val entities : game -> entity list
