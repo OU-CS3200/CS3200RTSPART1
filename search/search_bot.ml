@@ -76,7 +76,11 @@ let guess_model (v : view) : bot =
   else if h >= r then Policies.heavy_turtle
   else Policies.ranged_line
 
-let make_pro ?(ticks : int = 100) ?(budget : float = 0.4) ?(margin : float = 1.0) () : bot =
+let switch (a : bot) (b : bot) (t : int) : bot =
+  fun (v : view) -> if v.v_turn < t then a v else b v
+
+let make_pro ?(ticks : int = 100) ?(budget : float = 0.4) ?(margin : float = 1.0)
+    ?(seq : bool = false) ?(multi : bool = false) () : bot =
   let tbl : (string, game) Hashtbl.t = Hashtbl.create 8192 in
   let last : string ref = ref "my-bot" in
   let basic = make ~ticks () in
@@ -88,15 +92,28 @@ let make_pro ?(ticks : int = 100) ?(budget : float = 0.4) ?(margin : float = 1.0
       let g = fork v in
       let guess = guess_model v in
       let models = if guess == Bot.my_bot then [ Bot.my_bot ] else [ guess; Bot.my_bot ] in
-      let score_vs (model : bot) (plan : bot) : float =
-        let p0, p1 = if me = 0 then (plan, model) else (model, plan) in
-        let f = Memo.rollout_chunks ~cache:tbl ~interval:20 g p0 p1 ~ticks in
+      let value (f : game) : float =
         if is_over f then
           (if winner f = me then 1e6 -. float_of_int (turn f) else -1e6)
         else Eval.eval (view f me) in
+      let score_vs (model : bot) (plan : bot) : float =
+        let p0, p1 = if me = 0 then (plan, model) else (model, plan) in
+        let run (t : int) : float =
+          value (Memo.rollout_chunks ~cache:tbl ~interval:20 g p0 p1 ~ticks:t) in
+        if multi then 0.5 *. (run (max 20 (ticks - 40)) +. run ticks) else run ticks in
       let score ((name, plan) : string * bot) : float =
         let s = List.fold_left (fun acc m -> Float.min acc (score_vs m plan)) infinity models in
         if name = !last then s +. margin else s in
+      let cands : (string * bot) list =
+        if not seq then Policies.pro_candidates
+        else begin
+          let t = turn g + 40 in
+          let seconds = [ Bot.my_bot; Policies.heavy_turtle; Policies.light_flood ] in
+          List.concat_map
+            (fun ((na, a) : string * bot) ->
+              (na, a) :: List.map (fun (b : bot) -> (na, switch a b t)) seconds)
+            Policies.pro_candidates
+        end in
       let best : (float * string * bot) option ref = ref None in
       List.iter
         (fun ((name, plan) : string * bot) ->
@@ -107,10 +124,10 @@ let make_pro ?(ticks : int = 100) ?(budget : float = 0.4) ?(margin : float = 1.0
             | Some (bs, _, _) when bs >= s -> ()
             | _ -> best := Some (s, name, plan)
           end)
-        Policies.pro_candidates;
+        cands;
       (match !best with
        | Some (_, name, plan) -> last := name; plan v
        | None -> Bot.my_bot v)
     with _ -> basic v
 
-let bot : bot = make_pro ()
+let bot : bot = make_pro ~seq:true ()

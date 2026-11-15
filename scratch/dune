@@ -1,1 +1,0 @@
-(executable (name scratch) (libraries rtsarena rts1 search))

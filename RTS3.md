@@ -114,11 +114,11 @@ dune exec bin/bench.exe
 
 1. What happened to the hit rate?
 
-   The hite rate barely changed. 28.5% stayed the same, 10.2% changed to 10.4%, and 18.3% to 18.8% and the wins stayed the same. The broken key was fine and had no crashing happening.
+   The hit rate barely changed. 28.5% stayed the same, 10.2% changed to 10.4%, and 18.3% to 18.8% and the wins stayed the same. The broken key was fine and had no crashing happening.
 
 2. Were the games the cache handed back wrong? *How* were they wrong? (Compare a cached chunk with a freshly computed one: the units, the stockpiles, the turn.) Why does it matter for a rollout, even when the units come out right?
 
-   In a test two games with the same units but a different turn (0 and 50) and 7 extra gold in one of them. They got the same broken key. One chunk had ended up at turn 20 and the other was at 70, and my gold was 5 versus the other 12. So a cache hit would hand back the wrong turn and the wrong stockpile even if the units come out right. For a rollout that matters becasue it stops turn count and the bots read from the turn and gold numbers, thus a wrong turn or wrong gold changes the bots next moves.
+   In a test two games with the same units but a different turn (0 and 50) and 7 extra gold in one of them. They got the same broken key. One chunk had ended up at turn 20 and the other was at 70, and my gold was 5 versus the other 12. So a cache hit would hand back the wrong turn and the wrong stockpile even if the units come out right. For a rollout that matters because it stops turn count and the bots read from the turn and gold numbers, thus a wrong turn or wrong gold changes the bots next moves.
 
 3. Your bot keeps a `Hashtbl` that changes every time it is called — exactly the kind of hidden state RTS-1 Part D and RTS-2 fix 3 took away from `random_bot`. Why is your hidden state acceptable, and `random_bot`'s was not? What test in `test/test_rts3.ml` checks your answer?
 
@@ -168,7 +168,7 @@ League: out
 
 1. **(4 pts) A loss.** Find a game your search bot lost to a bot it should beat (another map, a different opponent model, a shorter rollout — look for one). Was the opponent model wrong, the eval wrong, or the horizon too short? Show the evidence: what the bot predicted, and what happened.
 
-   My search lost as P0 on default and rich to my-bot, and won the other games. I logged each consultation predicting score and chosen plan versus what the real eval was 100 ticks later. The prediction where right. Predicted -11.8 at t=40 and the real eval at t=140 was -11.8; predicted 24.3 at t=100 and real 24.3 at t=200; predicted -26.7 at t=160 and real -26.7 at t=260; predicted -65.0 at t=200 and real -65.0 at t=300. So my-bot and the eval were not the problem. The bot chose my-bot at 16 and 17 consultations, so no other plan in my menu scored higher. I think the limit is my menu and the 100-tick horizon, once a saw the deficit (t=160, -26.7) none of the six plans would be able to fix it.
+   My search lost as P0 on default and rich to my-bot, and won the other games. I logged each consultation predicting score and chosen plan versus what the real eval was 100 ticks later. The prediction were right. Predicted -11.8 at t=40 and the real eval at t=140 was -11.8; predicted 24.3 at t=100 and real 24.3 at t=200; predicted -26.7 at t=160 and real -26.7 at t=260; predicted -65.0 at t=200 and real -65.0 at t=300. So my-bot and the eval were not the problem. The bot chose my-bot at 16 of 17 consultations, so no other plan in my menu scored higher. I think the limit is my menu and the 100-tick horizon, once it saw the deficit (t=160, -26.7) none of the six plans would be able to fix it.
 
 2. **(3 pts) The horizon.** Run `bench` and look at the `wins` column for 20-tick and 100-tick rollouts. Why would a *shorter* lookahead lose games that a longer one wins, when the shorter one has more consultations' worth of time to spare?
 
@@ -183,7 +183,20 @@ League: out
 
 ## Unique contributions
 
-*Optional. What you did, why it is your own, and the evidence.*
+I built make_pro as my tournament entry. It does:
+   - Opponent guessing: it looks at the enemy's visible army and picks a matching oppent model
+   - Safe scoring: each plan is scored against the guess and against my RTS-1 bot
+   - Bigger menu 3 extra plans
+   - A 0,4s time guard and fallback
+   - Plan stickiness and faster wins scoring higher
+   - Plan sequemces: it also tests plan A then plan B after 40 ticks and plays A now. 
+Evidence
+ - basic 9/24, pro (100 ticks) 17/24. pro beat basic 6 of 8.
+ - Looking further ahead was worse: 150 ticks 11/24, 200 ticks 11/24.
+ - Extra features: base 9/24, seq 13/24, multi (two horizons) 13/24,
+  both 12/24. seq beat base 5 of 8 and beat multi 5 of 8.
+ - Against all built-in bots (4 maps, both sides), basic and pro both won 64/64, so those bots could not tell them apart.
+ - Speed: basic about 21 ms per move, pro about 47 ms (limit 1000 ms).
 
 ## Collaboration and AI
 
