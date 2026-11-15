@@ -19,7 +19,7 @@
 
 open Rtsarena
 [@@@warning "-26-27-32"]
-open Util
+
 
 (** Counters for the bench: every chunk is a hit or a miss. Given. *)
 type stats = { mutable hits : int; mutable misses : int }
@@ -45,7 +45,7 @@ let chunk ~(len : int) (g : game) (o0 : order list) (o1 : order list) : game =
     Hint: [Marshal.to_string] turns any value into a string, and sees
     through abstract types. [Digest.string] makes a string short. *)
 let key ~(len : int) (g : game) (o0 : order list) (o1 : order list) : string =
-  todo (len, g, o0, o1)
+  Digest.string (Marshal.to_string (len, g, o0, o1) [])
 
 (** 2. (10 pts) [rollout_chunks ?cache ~interval g p0 p1 ~ticks] must give
     the same game as [rollout ~interval g p0 p1 ~ticks] — the tests check
@@ -62,4 +62,28 @@ let key ~(len : int) (g : game) (o0 : order list) (o1 : order list) : string =
       the turn to reach its target then never ends. *)
 let rollout_chunks ?(cache : (string, game) Hashtbl.t option) ~(interval : int) (g : game)
     (p0 : bot) (p1 : bot) ~(ticks : int) : game =
-  todo (cache, interval, g, p0, p1, ticks)
+  let rec go (g : game) (left : int) : game =
+    if left <= 0 || is_over g then g
+    else begin
+      let len = min interval left in
+      let o0 = p0 (view g 0) in
+      let o1 = p1 (view g 1) in
+      let next =
+        match cache with
+        | None ->
+          stats.misses <- stats.misses + 1;
+          chunk ~len g o0 o1
+        | Some tbl ->
+          let k = key ~len g o0 o1 in
+          (match Hashtbl.find_opt tbl k with
+           | Some g' -> stats.hits <- stats.hits + 1; g'
+           | None ->
+             stats.misses <- stats.misses + 1;
+             let g' = chunk ~len g o0 o1 in
+             Hashtbl.replace tbl k g';
+             g')
+      in
+      go next (left - len)
+    end
+  in
+  go g ticks

@@ -47,3 +47,25 @@ let make ?(ticks : int = 100) ?(model : bot = Bot.my_bot) ?(cache : bool = true)
 (** Your tournament entry, and what [my-search] plays in the runner. Change
     its arguments if you want different settings. *)
 let bot : bot = make ()
+let make ?(ticks : int = 100) ?(model : bot = Bot.my_bot) ?(cache : bool = true) () : bot =
+  let tbl : (string, game) Hashtbl.t = Hashtbl.create 4096 in
+  fun (v : view) ->
+    let me = me_of v in
+    let g = fork v in
+    let score (plan : bot) : float =
+      let p0, p1 = if me = 0 then (plan, model) else (model, plan) in
+      let final =
+        if cache then Memo.rollout_chunks ~cache:tbl ~interval:20 g p0 p1 ~ticks
+        else rollout g p0 p1 ~ticks in
+      if is_over final then (if winner final = me then 1e6 else -1e6)
+      else Eval.eval (view final me) in
+    let best =
+      Policies.candidates
+      |> List.map (fun (_, plan) -> (score plan, plan))
+      |> List.fold_left
+           (fun acc (s, plan) ->
+             match acc with
+             | Some (bs, _) when bs >= s -> acc
+             | _ -> Some (s, plan))
+           None in
+    match best with Some (_, plan) -> plan v | None -> Bot.my_bot v

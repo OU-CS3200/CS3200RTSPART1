@@ -27,4 +27,61 @@ let attack_enemy : rule =
 
 let army (v : view) : int = count_of v Light + count_of v Heavy + count_of v Ranged
 
-let candidates : (string * bot) list = [ ("my-bot", Bot.my_bot) ]
+(* small building blocks *)
+let eco (n : int) : rule = always [ Harvest_with n ]
+
+let barracks_first : rule =
+  when_ (fun v -> not (has_barracks v)) [ Build_barracks ]
+
+let train (u : unit_type) : rule = always [ Train (u, 1) ]
+
+let push_at (n : int) : rule = guard (fun v -> army v >= n) attack_enemy
+
+(* a plan = economy + production + posture *)
+let plan (e : rule) (prod : rule) (post : rule) : bot =
+  fun v -> to_bot (all_of [ e; prod; post ]) v
+
+(* 1. tanks: slow, strong, attack late *)
+let heavy_turtle : bot =
+  plan (eco 2)
+    (first_of [ barracks_first; train Heavy ])
+    (first_of [ push_at 5; always [ Defend ] ])
+
+(* 2. fast and cheap, attack early *)
+let light_flood : bot =
+  plan (eco 2)
+    (first_of [ barracks_first; train Light ])
+    (first_of [ push_at 3; always [ Defend ] ])
+
+(* 3. shooters from far away *)
+let ranged_line : bot =
+  plan (eco 2)
+    (first_of [ barracks_first; train Ranged ])
+    (first_of [ push_at 4; always [ Defend ] ])
+
+(* 4. more workers first, then big army *)
+let boom : bot =
+  plan (eco 4)
+    (first_of
+       [ when_ (fun v -> count_of v Worker < 6) [ Train (Worker, 1) ];
+         barracks_first;
+         train Heavy ])
+    (first_of [ push_at 6; always [ Defend ] ])
+
+(* 5. stay home if enemy is close, else push *)
+let counter : bot =
+  plan (eco 2)
+    (first_of
+       [ barracks_first;
+         when_ (fun v -> army v < 2) [ Train (Light, 1) ];
+         train Heavy ])
+    (first_of
+       [ when_ (Bot.under_attack 6) [ Defend ]; push_at 3; always [ Defend ] ])
+
+let candidates : (string * bot) list =
+  [ ("my-bot", Bot.my_bot);
+    ("heavy-turtle", heavy_turtle);
+    ("light-flood", light_flood);
+    ("ranged-line", ranged_line);
+    ("boom", boom);
+    ("counter", counter) ]
